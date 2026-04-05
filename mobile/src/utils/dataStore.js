@@ -52,3 +52,53 @@ export async function deleteTarget(id) {
     await AsyncStorage.setItem(LOCAL_KEY, JSON.stringify(filtered));
   }
 }
+
+const INDOOR_KEY = '@indoor_exhibits';
+
+export async function getExhibits() {
+  if (db) {
+    const snap = await getDocs(collection(db, 'indoor_exhibits'));
+    const exhibits = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    return exhibits.sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
+  } else {
+    const stored = await AsyncStorage.getItem(INDOOR_KEY);
+    const exhibits = stored ? JSON.parse(stored) : [];
+    return exhibits.sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
+  }
+}
+
+export async function addExhibit(name, audioUri, orderIndex) {
+  let audioUrl = audioUri;
+
+  if (db && storage && audioUri) {
+    if (audioUri.startsWith('file://')) {
+      const response = await fetch(audioUri);
+      const blob = await response.blob();
+      const fileRef = ref(storage, `indoor_audio/${Date.now()}.m4a`);
+      await uploadBytes(fileRef, blob);
+      audioUrl = await getDownloadURL(fileRef);
+    }
+    
+    const newExhibit = { name, audioUrl, orderIndex };
+    const docRef = await addDoc(collection(db, 'indoor_exhibits'), newExhibit);
+    return { id: docRef.id, ...newExhibit };
+  } else {
+    const stored = await AsyncStorage.getItem(INDOOR_KEY);
+    const exhibits = stored ? JSON.parse(stored) : [];
+    const newExhibit = { id: Date.now().toString(), name, audioUrl, orderIndex };
+    exhibits.push(newExhibit);
+    await AsyncStorage.setItem(INDOOR_KEY, JSON.stringify(exhibits));
+    return newExhibit;
+  }
+}
+
+export async function deleteExhibit(id) {
+  if (db) {
+    await deleteDoc(doc(db, 'indoor_exhibits', id));
+  } else {
+    const stored = await AsyncStorage.getItem(INDOOR_KEY);
+    const exhibits = stored ? JSON.parse(stored) : [];
+    const filtered = exhibits.filter(e => e.id !== id);
+    await AsyncStorage.setItem(INDOOR_KEY, JSON.stringify(filtered));
+  }
+}
