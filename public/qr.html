@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Scan to Open App</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0f172a;
+      color: #f8fafc;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 1.5rem;
+      padding: 2.5rem 2rem;
+      text-align: center;
+      max-width: 420px;
+      width: 90%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    }
+    h1 { font-size: 1.75rem; margin-bottom: 0.5rem;
+         background: linear-gradient(to right, #60a5fa, #34d399);
+         -webkit-background-clip: text; background-clip: text;
+         -webkit-text-fill-color: transparent; }
+    .subtitle { color: #94a3b8; font-size: 0.95rem; margin-bottom: 2rem; }
+    #qr-wrap {
+      background: white;
+      border-radius: 1rem;
+      padding: 1rem;
+      display: inline-block;
+      margin-bottom: 1.5rem;
+    }
+    #qr-wrap canvas, #qr-wrap img { display: block; }
+    .url-box {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 0.5rem;
+      padding: 0.75rem 1rem;
+      font-size: 0.8rem;
+      color: #60a5fa;
+      word-break: break-all;
+      margin-bottom: 1.5rem;
+      font-family: monospace;
+    }
+    .steps { text-align: left; }
+    .step {
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-start;
+      margin-bottom: 0.75rem;
+    }
+    .step-num {
+      background: #3b82f6;
+      color: white;
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem; font-weight: 700;
+      flex-shrink: 0; margin-top: 2px;
+    }
+    .step-text { color: #cbd5e1; font-size: 0.875rem; }
+    .step-text strong { color: #f8fafc; }
+    .pin-badge {
+      display: inline-block;
+      background: #7c3aed;
+      color: white;
+      padding: 0.2rem 0.6rem;
+      border-radius: 6px;
+      font-family: monospace;
+      font-weight: 700;
+      font-size: 0.9rem;
+    }
+    .refresh-btn {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 0.6rem 1.5rem;
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+      cursor: pointer;
+      margin-top: 1rem;
+    }
+    .refresh-btn:hover { background: #2563eb; }
+  </style>
+  <!-- qrcode.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+<div class="card">
+  <h1>GPS Audio Tour</h1>
+  <p class="subtitle">Scan with <strong>Expo Go</strong> to open the app on your phone</p>
+
+  <div id="qr-wrap">
+    <div id="qrcode"></div>
+  </div>
+
+  <div class="url-box" id="expo-url">Loading…</div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-text">
+        Install <strong>Expo Go</strong> on your phone from the App Store or Google Play.
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-text">
+        <strong>Android:</strong> Open Expo Go → tap <em>Scan QR Code</em>.<br/>
+        <strong>iPhone:</strong> Open the Camera app, point at the QR code, tap the banner.
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-text">
+        On the Login screen, choose <strong>Tourist (User)</strong> to start the tour,<br/>
+        or <strong>Admin (Master)</strong> with PIN <span class="pin-badge">1234</span> to add locations.
+      </div>
+    </div>
+  </div>
+
+  <button class="refresh-btn" onclick="location.reload()">Refresh QR</button>
+</div>
+
+<script>
+  // Public ngrok tunnel — works from ANYWHERE (outside local WiFi too).
+  // This URL changes every time Expo tunnel restarts.
+  const expoUrl = 'exp://mzfdrfe-anonymous-8082.exp.direct';
+
+  document.getElementById('expo-url').textContent = expoUrl;
+
+  new QRCode(document.getElementById('qrcode'), {
+    text: expoUrl,
+    width: 256,
+    height: 256,
+    colorDark: '#000000',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+</script>
+</body>
+</html>
