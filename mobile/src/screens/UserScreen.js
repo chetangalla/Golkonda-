@@ -19,6 +19,7 @@ export default function UserScreen({ navigation }) {
   // GPS State
   const [targets, setTargets] = useState([]);
   const [currentLoc, setCurrentLoc] = useState(null);
+  const [currentFloor, setCurrentFloor] = useState(1);
   
   // Indoor State
   const [exhibits, setExhibits] = useState([]);
@@ -46,6 +47,7 @@ export default function UserScreen({ navigation }) {
   const exhibitsRef   = useRef([]);
   const showPromptRef = useRef(false);
   const showCameraRef = useRef(false);
+  const currentFloorRef = useRef(1);
 
   useEffect(() => {
     indoorIndexRef.current = indoorIndex;
@@ -54,6 +56,7 @@ export default function UserScreen({ navigation }) {
   useEffect(() => { exhibitsRef.current = exhibits; }, [exhibits]);
   useEffect(() => { showPromptRef.current = showPrompt; }, [showPrompt]);
   useEffect(() => { showCameraRef.current = showCamera; }, [showCamera]);
+  useEffect(() => { currentFloorRef.current = currentFloor; }, [currentFloor]);
 
   useEffect(() => {
     Audio.setAudioModeAsync({ playsInSilentModeIOS: true, allowsRecordingIOS: false, staysActiveInBackground: true });
@@ -152,6 +155,9 @@ export default function UserScreen({ navigation }) {
   const checkProximity = (lat, lng, latestTargets) => {
     const now = Date.now();
     latestTargets.forEach(target => {
+      // Must match explicit current floor (coerce both to strings to prevent legacy data type mismatches)
+      if (String(target.floor || 1) !== String(currentFloorRef.current)) return;
+
       const d = calculateDistance(lat, lng, target.lat, target.lng);
       let shouldTrigger = false;
       if (d <= AUTO_PLAY_DISTANCE) shouldTrigger = true;
@@ -237,13 +243,18 @@ export default function UserScreen({ navigation }) {
     }
   };
 
+  const handleFloorChange = (delta) => {
+    setCurrentFloor(Math.max(1, currentFloor + delta));
+    setIndoorIndex(0); // Reset sequence when changing floors
+  };
+
   // ==============================
   // RENDERING
   // ==============================
   
   const renderGpsItem = ({ item }) => {
     const dist = currentLoc ? calculateDistance(currentLoc.lat, currentLoc.lng, item.lat, item.lng) : null;
-    const isNear = dist !== null && dist <= AUTO_PLAY_DISTANCE * 2;
+    const isNear = dist !== null && dist <= AUTO_PLAY_DISTANCE;
     return (
       <View style={[styles.card, isNear && { borderColor: '#10b981', borderWidth: 1 }]}>
         <View style={{ flex: 1 }}>
@@ -257,8 +268,9 @@ export default function UserScreen({ navigation }) {
     );
   };
 
-  const nextExhibit = exhibits[indoorIndex];
-  const previousExhibit = indoorIndex > 0 ? exhibits[indoorIndex - 1] : null;
+  const currentFloorExhibits = exhibits.filter(e => String(e.floor || 1) === String(currentFloor));
+  const nextExhibit = currentFloorExhibits[indoorIndex];
+  const previousExhibit = indoorIndex > 0 ? currentFloorExhibits[indoorIndex - 1] : null;
 
   if (showCamera) {
     if (!hasCameraPermission) {
@@ -321,10 +333,19 @@ export default function UserScreen({ navigation }) {
               <Text style={styles.statusTitle}> GPS Status</Text>
             </View>
             <Text style={{ color: '#f8fafc' }}>{currentLoc ? `${currentLoc.lat.toFixed(5)}, ${currentLoc.lng.toFixed(5)}` : 'Searching for GPS...'}</Text>
+            
+            <View style={styles.floorRow}>
+              <Text style={{color: '#94a3b8'}}>I am on Floor:</Text>
+              <View style={{flexDirection: 'row', gap: 12, alignItems: 'center'}}>
+                 <TouchableOpacity onPress={() => handleFloorChange(-1)} style={styles.floorBtn}><Text style={{color: '#fff', fontWeight:'bold'}}>-</Text></TouchableOpacity>
+                 <Text style={{color: '#fff', fontSize: 18, fontWeight: 'bold', width: 24, textAlign: 'center'}}>{currentFloor}</Text>
+                 <TouchableOpacity onPress={() => handleFloorChange(1)} style={styles.floorBtn}><Text style={{color: '#fff', fontWeight:'bold'}}>+</Text></TouchableOpacity>
+              </View>
+            </View>
           </View>
           <Text style={styles.subtitle}>Nearby Tour Spots</Text>
           <FlatList
-            data={targets.sort((a,b) => {
+            data={targets.filter(t => String(t.floor || 1) === String(currentFloor)).sort((a,b) => {
               if(!currentLoc) return 0;
               return calculateDistance(currentLoc.lat, currentLoc.lng, a.lat, a.lng) - calculateDistance(currentLoc.lat, currentLoc.lng, b.lat, b.lng);
             })}
@@ -341,6 +362,15 @@ export default function UserScreen({ navigation }) {
               <Text style={styles.statusTitle}> Motion Sensor Tracking</Text>
             </View>
             <Text style={{ color: isWalking ? '#10b981' : '#f8fafc' }}>{isWalking ? 'Walking detected...' : 'Standing still.'}</Text>
+            
+            <View style={styles.floorRow}>
+              <Text style={{color: '#94a3b8'}}>I am on Floor:</Text>
+              <View style={{flexDirection: 'row', gap: 12, alignItems: 'center'}}>
+                 <TouchableOpacity onPress={() => handleFloorChange(-1)} style={styles.floorBtn}><Text style={{color: '#fff', fontWeight:'bold'}}>-</Text></TouchableOpacity>
+                 <Text style={{color: '#fff', fontSize: 18, fontWeight: 'bold', width: 24, textAlign: 'center'}}>{currentFloor}</Text>
+                 <TouchableOpacity onPress={() => handleFloorChange(1)} style={styles.floorBtn}><Text style={{color: '#fff', fontWeight:'bold'}}>+</Text></TouchableOpacity>
+              </View>
+            </View>
           </View>
 
           <View style={styles.indoorCard}>
@@ -371,8 +401,11 @@ export default function UserScreen({ navigation }) {
                 <Text style={{color: '#94a3b8'}}>Go Back to Previous</Text>
               </TouchableOpacity>
             )}
-            {indoorIndex === 0 && exhibits.length > 0 && (
+            {indoorIndex === 0 && currentFloorExhibits.length > 0 && (
                <Text style={{color: '#94a3b8', marginTop: 16, textAlign: 'center'}}>Start walking to trigger the first exhibit, or press Manual Play.</Text>
+            )}
+            {currentFloorExhibits.length === 0 && (
+               <Text style={{color: '#ef4444', marginTop: 16, textAlign: 'center'}}>No indoor sequence found for Floor {currentFloor}.</Text>
             )}
           </View>
         </>
@@ -427,5 +460,7 @@ const styles = StyleSheet.create({
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 20 },
   modalCard: { backgroundColor: '#1e293b', padding: 24, borderRadius: 16, borderWidth: 1, borderColor: '#334155' },
   btnPrimary: { flexDirection: 'row', backgroundColor: '#10b981', padding: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  btnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 }
+  btnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  floorRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16, justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#334155', paddingTop: 16 },
+  floorBtn: { backgroundColor: '#3b82f6', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6 }
 });

@@ -15,7 +15,7 @@ export async function getTargets() {
   }
 }
 
-export async function addTarget(name, lat, lng, audioUri) {
+export async function addTarget(name, lat, lng, audioUri, floor = 1) {
   let audioUrl = audioUri;
 
   if (db && storage && audioUri) {
@@ -28,14 +28,14 @@ export async function addTarget(name, lat, lng, audioUri) {
       audioUrl = await getDownloadURL(fileRef);
     }
     
-    const newTarget = { name, lat, lng, audioUrl };
+    const newTarget = { name, lat, lng, audioUrl, floor };
     const docRef = await addDoc(collection(db, 'targets'), newTarget);
     return { id: docRef.id, ...newTarget };
   } else {
     // Local fallback
     const stored = await AsyncStorage.getItem(LOCAL_KEY);
     const targets = stored ? JSON.parse(stored) : [];
-    const newTarget = { id: Date.now().toString(), name, lat, lng, audioUrl };
+    const newTarget = { id: Date.now().toString(), name, lat, lng, audioUrl, floor };
     targets.push(newTarget);
     await AsyncStorage.setItem(LOCAL_KEY, JSON.stringify(targets));
     return newTarget;
@@ -67,7 +67,7 @@ export async function getExhibits() {
   }
 }
 
-export async function addExhibit(name, audioUri, orderIndex) {
+export async function addExhibit(name, audioUri, orderIndex, floor = 1) {
   let audioUrl = audioUri;
 
   if (db && storage && audioUri) {
@@ -79,13 +79,13 @@ export async function addExhibit(name, audioUri, orderIndex) {
       audioUrl = await getDownloadURL(fileRef);
     }
     
-    const newExhibit = { name, audioUrl, orderIndex };
+    const newExhibit = { name, audioUrl, orderIndex, floor };
     const docRef = await addDoc(collection(db, 'indoor_exhibits'), newExhibit);
     return { id: docRef.id, ...newExhibit };
   } else {
     const stored = await AsyncStorage.getItem(INDOOR_KEY);
     const exhibits = stored ? JSON.parse(stored) : [];
-    const newExhibit = { id: Date.now().toString(), name, audioUrl, orderIndex };
+    const newExhibit = { id: Date.now().toString(), name, audioUrl, orderIndex, floor };
     exhibits.push(newExhibit);
     await AsyncStorage.setItem(INDOOR_KEY, JSON.stringify(exhibits));
     return newExhibit;

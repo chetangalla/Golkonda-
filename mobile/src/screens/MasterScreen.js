@@ -18,6 +18,7 @@ export default function MasterScreen({ navigation }) {
 
   // Shared Form State
   const [name, setName] = useState('');
+  const [floor, setFloor] = useState('1');
   const [recording, setRecording] = useState(null);
   const [audioUri, setAudioUri] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -77,17 +78,18 @@ export default function MasterScreen({ navigation }) {
     }
 
     setLoading(true);
+    const parsedFloor = parseInt(floor, 10) || 1;
+
     try {
       if (mode === 'gps') {
-        const newTarget = await addTarget(name, locData.lat, locData.lng, audioUri);
+        const newTarget = await addTarget(name, locData.lat, locData.lng, audioUri, parsedFloor);
         setTargets([...targets, newTarget]);
       } else {
         const orderIndex = exhibits.length > 0 ? exhibits[exhibits.length - 1].orderIndex + 1 : 1;
-        const newExhibit = await addExhibit(name, audioUri, orderIndex);
+        const newExhibit = await addExhibit(name, audioUri, orderIndex, parsedFloor);
         setExhibits([...exhibits, newExhibit]);
       }
       setName('');
-      setLocData(null);
       setAudioUri(null);
     } catch (err) {
       Alert.alert('Error', 'Failed to save.');
@@ -135,6 +137,8 @@ export default function MasterScreen({ navigation }) {
       <View style={styles.formCard}>
         <Text style={styles.subtitle}>{mode === 'gps' ? 'New GPS Target' : 'New Indoor Exhibit'}</Text>
         <TextInput style={styles.input} placeholder={mode === 'gps' ? "Location Name" : "Exhibit Name"} placeholderTextColor="#94a3b8" value={name} onChangeText={setName} />
+        
+        <TextInput style={styles.input} placeholder="Floor Number (e.g. 1)" placeholderTextColor="#94a3b8" keyboardType="numeric" value={floor} onChangeText={setFloor} />
 
         {mode === 'gps' && (
           <View style={styles.row}>
@@ -168,6 +172,7 @@ export default function MasterScreen({ navigation }) {
           <View style={styles.targetCard}>
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={{ color: '#8b5cf6', fontWeight: 'bold' }}>F{item.floor || 1}</Text>
                 {mode === 'indoor' && <Text style={{ color: '#3b82f6', fontWeight: 'bold' }}>{index + 1}.</Text>}
                 <Text style={styles.targetName}>{item.name}</Text>
               </View>
