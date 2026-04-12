@@ -2,11 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView } from 'react-native';
 import * as Location from 'expo-location';
 import { Audio } from 'expo-av';
+import * as Speech from 'expo-speech';
 import { MapPin, Navigation, Volume2, Music, Footprints, Play, ChevronRight, CornerUpRight, ArrowUpCircle } from 'lucide-react-native';
 import { getTargets, getExhibits } from '../utils/dataStore';
 import { calculateDistance } from '../utils/geo';
 
-const AUTO_PLAY_DISTANCE = 15;   
+const AUTO_PLAY_DISTANCE = 7;   
 const COOLDOWN_PERIOD    = 60000; 
 const WALKING_THRESHOLD  = 0.3; // Accel magnitude difference from 1g
 const WALKING_DURATION   = 5000; // 5 seconds of walking
@@ -22,6 +23,7 @@ export default function UserScreen({ navigation }) {
   // Indoor State
   const [exhibits, setExhibits] = useState([]);
   const [indoorIndex, setIndoorIndex] = useState(0);
+  const [activeGpsId, setActiveGpsId] = useState(null);
 
   // Common State
   const [errorMsg, setErrorMsg] = useState('');
@@ -75,14 +77,17 @@ export default function UserScreen({ navigation }) {
     setNowPlaying(null);
   };
 
-  const playAudio = async (url, name) => {
+  const playAudio = async (url, name, onFinish = null) => {
     await stopAll();
     setNowPlaying(name);
     try {
       const { sound } = await Audio.Sound.createAsync({ uri: url }, { shouldPlay: true });
       soundRef.current = sound;
       sound.setOnPlaybackStatusUpdate(status => {
-        if (status.didJustFinish) setNowPlaying(null);
+        if (status.didJustFinish) {
+          setNowPlaying(null);
+          if (onFinish) onFinish();
+        }
       });
     } catch (err) {
       console.warn('Audio play error:', err);
@@ -155,7 +160,13 @@ export default function UserScreen({ navigation }) {
 
       lastPlayedRef.current[target.id] = now;
       clearedRef.current[target.id] = false;
-      playAudio(target.audioUrl, target.name);
+      playAudio(target.audioUrl, target.name, () => {
+        setMode('indoor');
+        setActiveGpsId(target.id);
+        setCurrentFloor(Number(target.floor || 1));
+        setIndoorIndex(0);
+        Speech.speak("Please go inside to start your indoor tour.");
+      });
     });
   };
 
@@ -164,7 +175,7 @@ export default function UserScreen({ navigation }) {
   // ==============================
 
   const handlePlayNext = () => {
-    const currentFloorExhibits = exhibits.filter(e => String(e.floor || 1) === String(currentFloor));
+    const currentFloorExhibits = exhibits.filter(e => String(e.floor || 1) === String(currentFloor) && e.parentGpsId === activeGpsId);
     const exhibit = currentFloorExhibits[indoorIndex];
     if (exhibit) {
       playAudio(exhibit.audioUrl, exhibit.name);
@@ -234,7 +245,7 @@ export default function UserScreen({ navigation }) {
     );
   };
 
-  const currentFloorExhibits = exhibits.filter(e => String(e.floor || 1) === String(currentFloor));
+  const currentFloorExhibits = exhibits.filter(e => String(e.floor || 1) === String(currentFloor) && e.parentGpsId === activeGpsId);
   const nextExhibit = currentFloorExhibits[indoorIndex];
 
   return (
@@ -297,6 +308,22 @@ export default function UserScreen({ navigation }) {
             renderItem={renderGpsItem}
           />
         </>
+      ) : !activeGpsId ? (
+        <View style={styles.indoorCard}>
+          <Text style={{ color: '#f8fafc', fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>Select Your Building</Text>
+          <Text style={{ color: '#94a3b8', marginBottom: 16 }}>Which GPS Location are you inside of right now?</Text>
+          <FlatList
+            data={targets}
+            keyExtractor={item => item.id}
+            renderItem={({ item }) => (
+              <TouchableOpacity style={styles.card} onPress={() => { setActiveGpsId(item.id); setCurrentFloor(Number(item.floor || 1)); setIndoorIndex(0); }}>
+                <Text style={styles.targetName}>{item.name}</Text>
+                <ChevronRight color="#3b82f6" size={20} />
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={<Text style={{ color: '#ef4444' }}>No buildings available.</Text>}
+          />
+        </View>
       ) : (
         <>
           <View style={styles.indoorCard}>
@@ -326,6 +353,9 @@ export default function UserScreen({ navigation }) {
             </View>
             
             <Text style={{ color: '#94a3b8', fontSize: 14, fontWeight: 'bold', marginBottom: 8 }}>Upcoming Itinerary</Text>
+            <TouchableOpacity onPress={() => setActiveGpsId(null)} style={{ marginTop: 12 }}>
+              <Text style={{ color: '#ef4444', textDecorationLine: 'underline' }}>Leave this building</Text>
+            </TouchableOpacity>
           </View>
           
           <FlatList

@@ -56,18 +56,28 @@ export async function deleteTarget(id) {
 const INDOOR_KEY = '@indoor_exhibits';
 
 export async function getExhibits() {
+  const tData = await getTargets();
+  const lastTargetId = tData.length > 0 ? tData[tData.length - 1].id : null;
+
+  const processExhibits = (list) => {
+    return list.map(e => ({
+      ...e,
+      parentGpsId: e.parentGpsId || lastTargetId
+    })).sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
+  };
+
   if (db) {
     const snap = await getDocs(collection(db, 'indoor_exhibits'));
     const exhibits = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    return exhibits.sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
+    return processExhibits(exhibits);
   } else {
     const stored = await AsyncStorage.getItem(INDOOR_KEY);
     const exhibits = stored ? JSON.parse(stored) : [];
-    return exhibits.sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
+    return processExhibits(exhibits);
   }
 }
 
-export async function addExhibit(name, audioUri, orderIndex, floor = 1, nodeType = 'exhibit', targetFloor = null) {
+export async function addExhibit(name, audioUri, orderIndex, floor = 1, nodeType = 'exhibit', targetFloor = null, parentGpsId = null) {
   let audioUrl = audioUri;
 
   if (db && storage && audioUri) {
@@ -79,13 +89,13 @@ export async function addExhibit(name, audioUri, orderIndex, floor = 1, nodeType
       audioUrl = await getDownloadURL(fileRef);
     }
     
-    const newExhibit = { name, audioUrl, orderIndex, floor, nodeType, targetFloor };
+    const newExhibit = { name, audioUrl, orderIndex, floor, nodeType, targetFloor, parentGpsId };
     const docRef = await addDoc(collection(db, 'indoor_exhibits'), newExhibit);
     return { id: docRef.id, ...newExhibit };
   } else {
     const stored = await AsyncStorage.getItem(INDOOR_KEY);
     const exhibits = stored ? JSON.parse(stored) : [];
-    const newExhibit = { id: Date.now().toString(), name, audioUrl, orderIndex, floor, nodeType, targetFloor };
+    const newExhibit = { id: Date.now().toString(), name, audioUrl, orderIndex, floor, nodeType, targetFloor, parentGpsId };
     exhibits.push(newExhibit);
     await AsyncStorage.setItem(INDOOR_KEY, JSON.stringify(exhibits));
     return newExhibit;

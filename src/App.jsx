@@ -3,7 +3,7 @@ import { MapPin, Plus, Navigation, Volume2, AlertCircle, Music } from 'lucide-re
 import { calculateDistance, playAudio, enqueueAudio, preloadAudio, clearAudioQueue } from './utils/geo';
 import './index.css';
 
-const AUTO_PLAY_DISTANCE = 15;   // metres  – auto-trigger audio
+const AUTO_PLAY_DISTANCE = 7;   // metres  – auto-trigger audio
 const PRELOAD_DISTANCE   = 200;  // metres  – start buffering audio
 const COOLDOWN_PERIOD    = 60000; // 60 s   – don't re-trigger same location
 

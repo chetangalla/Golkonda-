@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, TextInput, StyleSheet, FlatList, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, StyleSheet, FlatList, Alert, ActivityIndicator, ScrollView } from 'react-native';
 import { Audio } from 'expo-av';
 import * as Location from 'expo-location';
 import { MapPin, Mic, Square, Trash2, Volume2, Footprints } from 'lucide-react-native';
@@ -21,6 +21,7 @@ export default function MasterScreen({ navigation }) {
   const [floor, setFloor] = useState('1');
   const [nodeType, setNodeType] = useState('exhibit'); // 'exhibit' | 'direction' | 'floor_change'
   const [targetFloor, setTargetFloor] = useState('2');
+  const [parentGpsId, setParentGpsId] = useState('');
   const [recording, setRecording] = useState(null);
   const [audioUri, setAudioUri] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -36,13 +37,14 @@ export default function MasterScreen({ navigation }) {
   };
 
   const loadData = async () => {
-    if (mode === 'gps') {
-      const data = await getTargets();
-      setTargets(data);
-    } else {
-      const data = await getExhibits();
-      setExhibits(data);
+    const tData = await getTargets();
+    setTargets(tData);
+    if (tData.length > 0) {
+      setParentGpsId(tData[0].id);
     }
+    
+    const eData = await getExhibits();
+    setExhibits(eData);
   };
 
   const startRecording = async () => {
@@ -89,7 +91,7 @@ export default function MasterScreen({ navigation }) {
       } else {
         const orderIndex = exhibits.length > 0 ? exhibits[exhibits.length - 1].orderIndex + 1 : 1;
         const parsedTargetFloor = parseInt(targetFloor, 10) || 2;
-        const newExhibit = await addExhibit(name, audioUri, orderIndex, parsedFloor, nodeType, parsedTargetFloor);
+        const newExhibit = await addExhibit(name, audioUri, orderIndex, parsedFloor, nodeType, parsedTargetFloor, parentGpsId);
         setExhibits([...exhibits, newExhibit]);
       }
       setName('');
@@ -148,6 +150,23 @@ export default function MasterScreen({ navigation }) {
           </View>
         )}
 
+        {mode === 'indoor' && targets.length > 0 && (
+          <View style={{ marginBottom: 16 }}>
+            <Text style={{ color: '#94a3b8', fontSize: 12, marginBottom: 8, fontWeight: 'bold' }}>BELONGS TO GPS LOCATION:</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {targets.map(t => (
+                <TouchableOpacity 
+                  key={t.id} 
+                  style={[styles.typeBtn, { paddingHorizontal: 16, paddingVertical: 12 }, parentGpsId === t.id && styles.activeTypeBtn]} 
+                  onPress={() => setParentGpsId(t.id)}
+                >
+                  <Text style={styles.typeBtnText}>{t.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
         <TextInput style={styles.input} placeholder={mode === 'gps' ? "Location Name" : "Instruction / Exhibit Name"} placeholderTextColor="#94a3b8" value={name} onChangeText={setName} />
         
         <TextInput style={styles.input} placeholder="Floor Number (e.g. 1)" placeholderTextColor="#94a3b8" keyboardType="numeric" value={floor} onChangeText={setFloor} />
@@ -196,6 +215,7 @@ export default function MasterScreen({ navigation }) {
               </View>
               {mode === 'gps' && <Text style={{ color: '#94a3b8', fontSize: 12 }}>{item.lat.toFixed(5)}, {item.lng.toFixed(5)}</Text>}
               {mode === 'indoor' && item.nodeType === 'floor_change' && <Text style={{ color: '#10b981', fontSize: 12 }}>Sends to F{item.targetFloor}</Text>}
+              {mode === 'indoor' && <Text style={{ color: '#64748b', fontSize: 12 }}>GPS Match: {targets.find(t => t.id === item.parentGpsId)?.name || 'Unknown'}</Text>}
             </View>
             <View style={{ flexDirection: 'row', gap: 16 }}>
               <TouchableOpacity onPress={() => playTestAudio(item.audioUrl)}><Volume2 color="#3b82f6" size={20} /></TouchableOpacity>
