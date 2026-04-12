@@ -12,7 +12,8 @@ const COOLDOWN_PERIOD    = 60000;
 const WALKING_THRESHOLD  = 0.3; // Accel magnitude difference from 1g
 const WALKING_DURATION   = 5000; // 5 seconds of walking
 
-export default function UserScreen({ navigation }) {
+export default function UserScreen({ route, navigation }) {
+  const { monumentId } = route.params || {};
   const [mode, setMode] = useState('gps'); // 'gps' | 'indoor'
 
   // GPS State
@@ -64,7 +65,10 @@ export default function UserScreen({ navigation }) {
 
   const loadData = async () => {
     const tData = await getTargets();
-    setTargets(tData);
+    // Filter GPS targets strictly by the physical Monument they selected
+    const filteredTargets = monumentId ? tData.filter(t => t.parentMonumentId === monumentId) : tData;
+    setTargets(filteredTargets);
+    
     const eData = await getExhibits();
     setExhibits(eData);
   };
@@ -160,12 +164,18 @@ export default function UserScreen({ navigation }) {
 
       lastPlayedRef.current[target.id] = now;
       clearedRef.current[target.id] = false;
+      
+      // Check if this GPS target contains any inside indoor exhibits
+      const hasIndoorTour = exhibitsRef.current.some(e => e.parentGpsId === target.id);
+      
       playAudio(target.audioUrl, target.name, () => {
-        setMode('indoor');
-        setActiveGpsId(target.id);
-        setCurrentFloor(Number(target.floor || 1));
-        setIndoorIndex(0);
-        Speech.speak("Please go inside to start your indoor tour.");
+        if (hasIndoorTour) {
+          setMode('indoor');
+          setActiveGpsId(target.id);
+          setCurrentFloor(Number(target.floor || 1));
+          setIndoorIndex(0);
+          Speech.speak("Please go inside to start your indoor tour.");
+        }
       });
     });
   };
@@ -310,19 +320,19 @@ export default function UserScreen({ navigation }) {
         </>
       ) : !activeGpsId ? (
         <View style={styles.indoorCard}>
-          <Text style={{ color: '#f8fafc', fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>Select Your Building</Text>
-          <Text style={{ color: '#94a3b8', marginBottom: 16 }}>Which GPS Location are you inside of right now?</Text>
-          <FlatList
-            data={targets}
-            keyExtractor={item => item.id}
-            renderItem={({ item }) => (
-              <TouchableOpacity style={styles.card} onPress={() => { setActiveGpsId(item.id); setCurrentFloor(Number(item.floor || 1)); setIndoorIndex(0); }}>
-                <Text style={styles.targetName}>{item.name}</Text>
-                <ChevronRight color="#3b82f6" size={20} />
-              </TouchableOpacity>
-            )}
-            ListEmptyComponent={<Text style={{ color: '#ef4444' }}>No buildings available.</Text>}
-          />
+            <Text style={{ color: '#f8fafc', fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>Select Your Building</Text>
+            <Text style={{ color: '#94a3b8', marginBottom: 16 }}>Which GPS Location are you inside of right now?</Text>
+            <FlatList
+              data={targets}
+              keyExtractor={item => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={styles.card} onPress={() => { setActiveGpsId(item.id); setCurrentFloor(Number(item.floor || 1)); setIndoorIndex(0); }}>
+                  <Text style={styles.targetName}>{item.name}</Text>
+                  <ChevronRight color="#3b82f6" size={20} />
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={<Text style={{ color: '#ef4444' }}>No buildings available in this monument.</Text>}
+            />
         </View>
       ) : (
         <>
@@ -373,28 +383,24 @@ export default function UserScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a', padding: 20, paddingTop: 40 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#f8fafc' },
-  tabContainer: { flexDirection: 'row', marginBottom: 20, backgroundColor: '#1e293b', borderRadius: 8, padding: 4 },
-  tab: { flex: 1, padding: 10, alignItems: 'center', borderRadius: 6 },
-  activeTab: { backgroundColor: '#3b82f6' },
-  tabText: { color: '#fff', fontWeight: '600' },
-  statusCard: { backgroundColor: '#1e293b', padding: 16, borderRadius: 12, marginBottom: 20 },
-  statusTitle: { color: '#f8fafc', fontWeight: '600', fontSize: 16 },
-  subtitle: { fontSize: 18, fontWeight: '600', color: '#f8fafc', marginBottom: 12 },
-  card: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#1e293b', padding: 16, borderRadius: 8, marginBottom: 12, alignItems: 'center' },
-  sequenceCard: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#1e293b', padding: 12, borderRadius: 8, marginBottom: 8, alignItems: 'center' },
-  activeSequenceCard: { borderColor: '#3b82f6', borderWidth: 2, backgroundColor: '#0f172a' },
+  title: { fontSize: 26, fontWeight: '800', color: '#f8fafc', letterSpacing: 0.5 },
+  tabContainer: { flexDirection: 'row', marginBottom: 20, backgroundColor: 'rgba(30, 41, 59, 0.8)', borderRadius: 12, padding: 4, borderWidth: 1, borderColor: '#334155' },
+  tab: { flex: 1, padding: 12, alignItems: 'center', borderRadius: 8 },
+  activeTab: { backgroundColor: '#3b82f6', shadowColor: '#3b82f6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 },
+  tabText: { color: '#fff', fontWeight: 'bold', letterSpacing: 0.5 },
+  statusCard: { backgroundColor: 'rgba(30, 41, 59, 0.7)', padding: 20, borderRadius: 16, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(51, 65, 85, 0.8)' },
+  statusTitle: { color: '#f8fafc', fontWeight: 'bold', fontSize: 16 },
+  subtitle: { fontSize: 18, fontWeight: '700', color: '#f8fafc', marginBottom: 12 },
+  card: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: 'rgba(30, 41, 59, 0.7)', padding: 16, borderRadius: 12, marginBottom: 12, alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
+  sequenceCard: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: 'rgba(30, 41, 59, 0.7)', padding: 16, borderRadius: 12, marginBottom: 8, alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
+  activeSequenceCard: { borderColor: '#3b82f6', borderWidth: 2, backgroundColor: 'rgba(15, 23, 42, 0.9)' },
   targetName: { color: '#f8fafc', fontSize: 16, fontWeight: '600', marginBottom: 4 },
-  playBtn: { backgroundColor: '#3b82f6', padding: 10, borderRadius: 8 },
-  miniPlayBtn: { backgroundColor: '#475569', padding: 8, borderRadius: 6 },
-  nowPlayingCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#064e3b', borderWidth: 1, borderColor: '#10b981', padding: 12, borderRadius: 10, marginBottom: 16 },
-  stopBtn: { backgroundColor: '#ef4444', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
-  indoorCard: { backgroundColor: '#1e293b', padding: 20, borderRadius: 12 },
-  actionBtn: { flexDirection: 'row', backgroundColor: '#10b981', padding: 14, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 20 },
-  modalCard: { backgroundColor: '#1e293b', padding: 24, borderRadius: 16, borderWidth: 1, borderColor: '#334155' },
-  btnPrimary: { flexDirection: 'row', backgroundColor: '#10b981', padding: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  btnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  floorRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16, justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#334155', paddingTop: 16 },
-  floorBtn: { backgroundColor: '#3b82f6', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6 }
+  playBtn: { backgroundColor: '#3b82f6', padding: 12, borderRadius: 10 },
+  miniPlayBtn: { backgroundColor: '#475569', padding: 10, borderRadius: 8 },
+  nowPlayingCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(6, 78, 59, 0.8)', borderWidth: 1, borderColor: '#10b981', padding: 16, borderRadius: 12, marginBottom: 16 },
+  stopBtn: { backgroundColor: '#ef4444', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  indoorCard: { backgroundColor: 'rgba(30, 41, 59, 0.7)', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(51, 65, 85, 0.8)', marginBottom: 16 },
+  actionBtn: { flexDirection: 'row', backgroundColor: '#10b981', padding: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  floorRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16, justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', paddingTop: 16 },
+  floorBtn: { backgroundColor: '#3b82f6', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 }
 });
