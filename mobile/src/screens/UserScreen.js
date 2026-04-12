@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView } from 'react-native';
 import * as Location from 'expo-location';
 import { Audio } from 'expo-av';
-import { Accelerometer } from 'expo-sensors';
-import { Camera, CameraView } from 'expo-camera';
-import { MapPin, Navigation, Volume2, Music, Camera as CameraIcon, Check, Footprints, Play } from 'lucide-react-native';
+import { MapPin, Navigation, Volume2, Music, Footprints, Play, ChevronRight, CornerUpRight, ArrowUpCircle } from 'lucide-react-native';
 import { getTargets, getExhibits } from '../utils/dataStore';
 import { calculateDistance } from '../utils/geo';
 
@@ -23,11 +21,7 @@ export default function UserScreen({ navigation }) {
   
   // Indoor State
   const [exhibits, setExhibits] = useState([]);
-  const [indoorIndex, setIndoorIndex] = useState(0); // Which exhibit are we trying to reach next
-  const [isWalking, setIsWalking] = useState(false);
-  const [showPrompt, setShowPrompt] = useState(false);
-  const [showCamera, setShowCamera] = useState(false);
-  const [hasCameraPermission, setHasCameraPermission] = useState(null);
+  const [indoorIndex, setIndoorIndex] = useState(0);
 
   // Common State
   const [errorMsg, setErrorMsg] = useState('');
@@ -40,13 +34,8 @@ export default function UserScreen({ navigation }) {
   const soundRef      = useRef(null);
   
   // Indoor Refs
-  const accelSub      = useRef(null);
-  const walkingTime   = useRef(0);
-  const lastAccelTime = useRef(Date.now());
   const indoorIndexRef = useRef(0);
   const exhibitsRef   = useRef([]);
-  const showPromptRef = useRef(false);
-  const showCameraRef = useRef(false);
   const currentFloorRef = useRef(1);
 
   useEffect(() => {
@@ -54,20 +43,11 @@ export default function UserScreen({ navigation }) {
   }, [indoorIndex]);
 
   useEffect(() => { exhibitsRef.current = exhibits; }, [exhibits]);
-  useEffect(() => { showPromptRef.current = showPrompt; }, [showPrompt]);
-  useEffect(() => { showCameraRef.current = showCamera; }, [showCamera]);
   useEffect(() => { currentFloorRef.current = currentFloor; }, [currentFloor]);
 
   useEffect(() => {
     Audio.setAudioModeAsync({ playsInSilentModeIOS: true, allowsRecordingIOS: false, staysActiveInBackground: true });
-    
-    (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasCameraPermission(status === 'granted');
-    })();
-    
     loadData();
-
     return () => stopAll();
   }, []);
 
@@ -75,10 +55,8 @@ export default function UserScreen({ navigation }) {
     stopAll();
     if (mode === 'gps') {
       startTracking();
-      stopAccelerometer();
     } else {
       stopTracking();
-      startAccelerometer();
     }
   }, [mode]);
 
@@ -184,68 +162,56 @@ export default function UserScreen({ navigation }) {
   // ==============================
   // INDOOR TOUR LOGIC
   // ==============================
-  const startAccelerometer = () => {
-    Accelerometer.setUpdateInterval(250); 
-    accelSub.current = Accelerometer.addListener(data => {
-      // Math.abs(gForce - 1g) to find acceleration beyond gravity
-      const gForce = Math.sqrt(data.x * data.x + data.y * data.y + data.z * data.z);
-      const isMotion = Math.abs(gForce - 1.0) > 0.15; // Subtle walking threshold
-      const now = Date.now();
 
-      if (isMotion) lastAccelTime.current = now;
-
-      // 1.5 second leeway between steps to keep walking state active
-      const activeWalking = (now - lastAccelTime.current) < 1500;
-
-      if (activeWalking) {
-        if (walkingTime.current === 0) {
-          walkingTime.current = now; // Mark start of continuous walk
-          setIsWalking(true);
-        } else if (now - walkingTime.current > WALKING_DURATION) {
-          triggerSmartPrompt();
-          walkingTime.current = now; // Reset trigger window to prevent infinite firing
-        }
-      } else {
-        if (walkingTime.current > 0) {
-          walkingTime.current = 0;
-          setIsWalking(false);
-        }
-      }
-    });
-  };
-
-  const stopAccelerometer = () => {
-    if (accelSub.current) {
-      accelSub.current.remove();
-      accelSub.current = null;
-    }
-  };
-
-  const triggerSmartPrompt = () => {
-    // Only trigger if we aren't already prompting and have a next exhibit
-    if (
-      exhibitsRef.current && 
-      exhibitsRef.current.length > indoorIndexRef.current && 
-      !showPromptRef.current && 
-      !showCameraRef.current
-    ) {
-      setShowPrompt(true);
-    }
-  };
-
-  const confirmExhibit = () => {
-    setShowPrompt(false);
-    setShowCamera(false);
-    const exhibit = exhibits[indoorIndex];
+  const handlePlayNext = () => {
+    const currentFloorExhibits = exhibits.filter(e => String(e.floor || 1) === String(currentFloor));
+    const exhibit = currentFloorExhibits[indoorIndex];
     if (exhibit) {
       playAudio(exhibit.audioUrl, exhibit.name);
-      setIndoorIndex(indoorIndex + 1);
+
+      if (exhibit.nodeType === 'floor_change') {
+        const target = exhibit.targetFloor || currentFloor + 1;
+        setCurrentFloor(target);
+        setIndoorIndex(0);
+      } else {
+        setIndoorIndex(indoorIndex + 1);
+      }
     }
   };
 
   const handleFloorChange = (delta) => {
     setCurrentFloor(Math.max(1, currentFloor + delta));
     setIndoorIndex(0); // Reset sequence when changing floors
+  };
+
+  const renderIndoorItem = ({ item, index }) => {
+    const isPast = index < indoorIndex;
+    const isCurrent = index === indoorIndex;
+    
+    const getIcon = () => {
+      if (item.nodeType === 'direction') return <CornerUpRight color={isCurrent ? '#3b82f6' : '#94a3b8'} size={20} />;
+      if (item.nodeType === 'floor_change') return <ArrowUpCircle color={isCurrent ? '#8b5cf6' : '#94a3b8'} size={20} />;
+      return <Music color={isCurrent ? '#10b981' : '#94a3b8'} size={20} />;
+    };
+
+    return (
+      <TouchableOpacity 
+        style={[styles.sequenceCard, isCurrent && styles.activeSequenceCard]} 
+        onPress={() => setIndoorIndex(index)}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 }}>
+          <Text style={{ color: isCurrent ? '#f8fafc' : '#64748b', fontWeight: 'bold' }}>{index + 1}.</Text>
+          {getIcon()}
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.targetName, !isCurrent && !isPast && { color: '#94a3b8' }, isPast && { textDecorationLine: 'line-through', color: '#64748b' }]}>{item.name}</Text>
+            {item.nodeType === 'floor_change' && <Text style={{ color: '#8b5cf6', fontSize: 12 }}>Jumps to Floor {item.targetFloor}</Text>}
+          </View>
+        </View>
+        <TouchableOpacity onPress={() => playAudio(item.audioUrl, item.name)} style={[styles.miniPlayBtn, isCurrent && { backgroundColor: '#3b82f6' }]}>
+          <Volume2 color="#fff" size={14} />
+        </TouchableOpacity>
+      </TouchableOpacity>
+    );
   };
 
   // ==============================
@@ -270,29 +236,6 @@ export default function UserScreen({ navigation }) {
 
   const currentFloorExhibits = exhibits.filter(e => String(e.floor || 1) === String(currentFloor));
   const nextExhibit = currentFloorExhibits[indoorIndex];
-  const previousExhibit = indoorIndex > 0 ? currentFloorExhibits[indoorIndex - 1] : null;
-
-  if (showCamera) {
-    if (!hasCameraPermission) {
-      return <View style={styles.container}><Text style={{color:'white'}}>No access to camera</Text></View>;
-    }
-    return (
-      <View style={{flex: 1, backgroundColor: 'black'}}>
-        <CameraView style={{flex: 1}} facing="back">
-          <View style={{flex: 1, justifyContent: 'flex-end', padding: 20, paddingBottom: 50}}>
-            <Text style={{color: 'white', textAlign: 'center', marginBottom: 20, fontSize: 18, fontWeight: 'bold', textShadowColor: 'black', textShadowRadius: 10}}>Point at {nextExhibit?.name}</Text>
-            <TouchableOpacity style={styles.btnPrimary} onPress={confirmExhibit}>
-              <Check color="#fff" size={20} style={{marginRight: 8}}/>
-              <Text style={styles.btnText}>Confirm Exhibit</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={{marginTop: 16, alignItems: 'center'}} onPress={() => setShowCamera(false)}>
-              <Text style={{color: '#f8fafc', fontSize: 16}}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </CameraView>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
@@ -345,7 +288,7 @@ export default function UserScreen({ navigation }) {
           </View>
           <Text style={styles.subtitle}>Nearby Tour Spots</Text>
           <FlatList
-            data={targets.filter(t => String(t.floor || 1) === String(currentFloor)).sort((a,b) => {
+            data={targets.filter(t => String(t.floor || 1) === String(currentFloorRef.current)).sort((a,b) => {
               if(!currentLoc) return 0;
               return calculateDistance(currentLoc.lat, currentLoc.lng, a.lat, a.lng) - calculateDistance(currentLoc.lat, currentLoc.lng, b.lat, b.lng);
             })}
@@ -356,85 +299,43 @@ export default function UserScreen({ navigation }) {
         </>
       ) : (
         <>
-          <View style={styles.statusCard}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-              <Footprints color={isWalking ? '#10b981' : '#94a3b8'} size={20} />
-              <Text style={styles.statusTitle}> Motion Sensor Tracking</Text>
-            </View>
-            <Text style={{ color: isWalking ? '#10b981' : '#f8fafc' }}>{isWalking ? 'Walking detected...' : 'Standing still.'}</Text>
-            
-            <View style={styles.floorRow}>
-              <Text style={{color: '#94a3b8'}}>I am on Floor:</Text>
-              <View style={{flexDirection: 'row', gap: 12, alignItems: 'center'}}>
+          <View style={styles.indoorCard}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <Text style={{ color: '#f8fafc', fontSize: 18, fontWeight: 'bold' }}>Floor {currentFloor} Guide</Text>
+              <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
                  <TouchableOpacity onPress={() => handleFloorChange(-1)} style={styles.floorBtn}><Text style={{color: '#fff', fontWeight:'bold'}}>-</Text></TouchableOpacity>
-                 <Text style={{color: '#fff', fontSize: 18, fontWeight: 'bold', width: 24, textAlign: 'center'}}>{currentFloor}</Text>
                  <TouchableOpacity onPress={() => handleFloorChange(1)} style={styles.floorBtn}><Text style={{color: '#fff', fontWeight:'bold'}}>+</Text></TouchableOpacity>
               </View>
             </View>
-          </View>
 
-          <View style={styles.indoorCard}>
-            {previousExhibit && (
-              <View style={{marginBottom: 16}}>
-                <Text style={{color: '#94a3b8', fontSize: 12}}>Previous Exhibit:</Text>
-                <Text style={{color: '#cbd5e1', fontSize: 14}}>{previousExhibit.name}</Text>
-              </View>
-            )}
-
-            <View style={{padding: 16, backgroundColor: '#0f172a', borderRadius: 8, borderColor: '#3b82f6', borderWidth: 1}}>
-              <Text style={{color: '#3b82f6', fontSize: 12, fontWeight: 'bold', marginBottom: 4}}>NEXT STOP</Text>
+            <View style={{padding: 16, backgroundColor: '#0f172a', borderRadius: 8, borderColor: nextExhibit?.nodeType === 'direction' ? '#8b5cf6' : '#3b82f6', borderWidth: 1, marginBottom: 16}}>
+              <Text style={{color: nextExhibit?.nodeType === 'direction' ? '#8b5cf6' : '#3b82f6', fontSize: 12, fontWeight: 'bold', marginBottom: 4}}>
+                {nextExhibit?.nodeType === 'direction' ? 'NEXT DIRECTION' : nextExhibit?.nodeType === 'floor_change' ? 'PROCEED TO FLOOR' : 'NEXT EXHIBIT'}
+              </Text>
               {nextExhibit ? (
                 <>
                   <Text style={{color: '#f8fafc', fontSize: 20, fontWeight: 'bold', marginBottom: 16}}>{nextExhibit.name}</Text>
-                  <TouchableOpacity style={styles.actionBtn} onPress={() => confirmExhibit()}>
+                  <TouchableOpacity style={styles.actionBtn} onPress={handlePlayNext}>
                     <Play color="#fff" size={16} style={{marginRight: 8}}/>
-                    <Text style={{color: 'white', fontWeight: 'bold'}}>Manual Play Next</Text>
+                    <Text style={{color: 'white', fontWeight: 'bold'}}>Play & Continue</Text>
                   </TouchableOpacity>
                 </>
               ) : (
-                <Text style={{color: '#10b981', fontSize: 18, fontWeight: 'bold'}}>Tour Complete! 🎉</Text>
+                <Text style={{color: '#10b981', fontSize: 18, fontWeight: 'bold'}}>Floor Complete!</Text>
               )}
             </View>
             
-            {indoorIndex > 0 && (
-              <TouchableOpacity style={{marginTop: 16, alignSelf: 'center'}} onPress={() => setIndoorIndex(indoorIndex - 1)}>
-                <Text style={{color: '#94a3b8'}}>Go Back to Previous</Text>
-              </TouchableOpacity>
-            )}
-            {indoorIndex === 0 && currentFloorExhibits.length > 0 && (
-               <Text style={{color: '#94a3b8', marginTop: 16, textAlign: 'center'}}>Start walking to trigger the first exhibit, or press Manual Play.</Text>
-            )}
-            {currentFloorExhibits.length === 0 && (
-               <Text style={{color: '#ef4444', marginTop: 16, textAlign: 'center'}}>No indoor sequence found for Floor {currentFloor}.</Text>
-            )}
+            <Text style={{ color: '#94a3b8', fontSize: 14, fontWeight: 'bold', marginBottom: 8 }}>Upcoming Itinerary</Text>
           </View>
+          
+          <FlatList
+            data={currentFloorExhibits}
+            keyExtractor={item => item.id}
+            renderItem={renderIndoorItem}
+            ListEmptyComponent={<Text style={{ color: '#ef4444', textAlign: 'center', marginTop: 20 }}>No guide data for Floor {currentFloor}.</Text>}
+          />
         </>
       )}
-
-      {/* Smart Prompt Modal */}
-      <Modal visible={showPrompt} transparent animationType="slide">
-        <View style={styles.modalBg}>
-          <View style={styles.modalCard}>
-            <Text style={{color: '#f8fafc', fontSize: 20, fontWeight: 'bold', marginBottom: 8, textAlign: 'center'}}>Are you at {nextExhibit?.name}?</Text>
-            <Text style={{color: '#94a3b8', marginBottom: 24, textAlign: 'center'}}>We detected you stopped walking.</Text>
-            
-            <TouchableOpacity style={styles.btnPrimary} onPress={confirmExhibit}>
-              <Play color="#fff" size={18} style={{marginRight: 8}}/>
-              <Text style={styles.btnText}>Yes, Play Audio</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.btnPrimary, {backgroundColor: '#8b5cf6', marginTop: 12}]} onPress={() => { setShowPrompt(false); setShowCamera(true); }}>
-              <CameraIcon color="#fff" size={18} style={{marginRight: 8}}/>
-              <Text style={styles.btnText}>Use Camera to Confirm</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={{marginTop: 20, padding: 10}} onPress={() => setShowPrompt(false)}>
-              <Text style={{color: '#94a3b8', fontSize: 16, textAlign: 'center'}}>Not yet, keep walking</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
     </View>
   );
 }
@@ -451,8 +352,11 @@ const styles = StyleSheet.create({
   statusTitle: { color: '#f8fafc', fontWeight: '600', fontSize: 16 },
   subtitle: { fontSize: 18, fontWeight: '600', color: '#f8fafc', marginBottom: 12 },
   card: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#1e293b', padding: 16, borderRadius: 8, marginBottom: 12, alignItems: 'center' },
+  sequenceCard: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#1e293b', padding: 12, borderRadius: 8, marginBottom: 8, alignItems: 'center' },
+  activeSequenceCard: { borderColor: '#3b82f6', borderWidth: 2, backgroundColor: '#0f172a' },
   targetName: { color: '#f8fafc', fontSize: 16, fontWeight: '600', marginBottom: 4 },
   playBtn: { backgroundColor: '#3b82f6', padding: 10, borderRadius: 8 },
+  miniPlayBtn: { backgroundColor: '#475569', padding: 8, borderRadius: 6 },
   nowPlayingCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#064e3b', borderWidth: 1, borderColor: '#10b981', padding: 12, borderRadius: 10, marginBottom: 16 },
   stopBtn: { backgroundColor: '#ef4444', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
   indoorCard: { backgroundColor: '#1e293b', padding: 20, borderRadius: 12 },

@@ -67,7 +67,7 @@ export async function getExhibits() {
   }
 }
 
-export async function addExhibit(name, audioUri, orderIndex, floor = 1) {
+export async function addExhibit(name, audioUri, orderIndex, floor = 1, nodeType = 'exhibit', targetFloor = null) {
   let audioUrl = audioUri;
 
   if (db && storage && audioUri) {
@@ -79,13 +79,13 @@ export async function addExhibit(name, audioUri, orderIndex, floor = 1) {
       audioUrl = await getDownloadURL(fileRef);
     }
     
-    const newExhibit = { name, audioUrl, orderIndex, floor };
+    const newExhibit = { name, audioUrl, orderIndex, floor, nodeType, targetFloor };
     const docRef = await addDoc(collection(db, 'indoor_exhibits'), newExhibit);
     return { id: docRef.id, ...newExhibit };
   } else {
     const stored = await AsyncStorage.getItem(INDOOR_KEY);
     const exhibits = stored ? JSON.parse(stored) : [];
-    const newExhibit = { id: Date.now().toString(), name, audioUrl, orderIndex, floor };
+    const newExhibit = { id: Date.now().toString(), name, audioUrl, orderIndex, floor, nodeType, targetFloor };
     exhibits.push(newExhibit);
     await AsyncStorage.setItem(INDOOR_KEY, JSON.stringify(exhibits));
     return newExhibit;

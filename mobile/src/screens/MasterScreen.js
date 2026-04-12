@@ -19,6 +19,8 @@ export default function MasterScreen({ navigation }) {
   // Shared Form State
   const [name, setName] = useState('');
   const [floor, setFloor] = useState('1');
+  const [nodeType, setNodeType] = useState('exhibit'); // 'exhibit' | 'direction' | 'floor_change'
+  const [targetFloor, setTargetFloor] = useState('2');
   const [recording, setRecording] = useState(null);
   const [audioUri, setAudioUri] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -86,7 +88,8 @@ export default function MasterScreen({ navigation }) {
         setTargets([...targets, newTarget]);
       } else {
         const orderIndex = exhibits.length > 0 ? exhibits[exhibits.length - 1].orderIndex + 1 : 1;
-        const newExhibit = await addExhibit(name, audioUri, orderIndex, parsedFloor);
+        const parsedTargetFloor = parseInt(targetFloor, 10) || 2;
+        const newExhibit = await addExhibit(name, audioUri, orderIndex, parsedFloor, nodeType, parsedTargetFloor);
         setExhibits([...exhibits, newExhibit]);
       }
       setName('');
@@ -135,10 +138,23 @@ export default function MasterScreen({ navigation }) {
       </View>
 
       <View style={styles.formCard}>
-        <Text style={styles.subtitle}>{mode === 'gps' ? 'New GPS Target' : 'New Indoor Exhibit'}</Text>
-        <TextInput style={styles.input} placeholder={mode === 'gps' ? "Location Name" : "Exhibit Name"} placeholderTextColor="#94a3b8" value={name} onChangeText={setName} />
+        <Text style={styles.subtitle}>{mode === 'gps' ? 'New GPS Target' : 'New Indoor Step'}</Text>
+        
+        {mode === 'indoor' && (
+          <View style={{ flexDirection: 'row', marginBottom: 12, gap: 8 }}>
+            <TouchableOpacity style={[styles.typeBtn, nodeType === 'exhibit' && styles.activeTypeBtn]} onPress={() => setNodeType('exhibit')}><Text style={styles.typeBtnText}>🎨 Exhibit</Text></TouchableOpacity>
+            <TouchableOpacity style={[styles.typeBtn, nodeType === 'direction' && styles.activeTypeBtn]} onPress={() => setNodeType('direction')}><Text style={styles.typeBtnText}>➡️ Direct</Text></TouchableOpacity>
+            <TouchableOpacity style={[styles.typeBtn, nodeType === 'floor_change' && styles.activeTypeBtn]} onPress={() => setNodeType('floor_change')}><Text style={styles.typeBtnText}>📶 Floor</Text></TouchableOpacity>
+          </View>
+        )}
+
+        <TextInput style={styles.input} placeholder={mode === 'gps' ? "Location Name" : "Instruction / Exhibit Name"} placeholderTextColor="#94a3b8" value={name} onChangeText={setName} />
         
         <TextInput style={styles.input} placeholder="Floor Number (e.g. 1)" placeholderTextColor="#94a3b8" keyboardType="numeric" value={floor} onChangeText={setFloor} />
+
+        {mode === 'indoor' && nodeType === 'floor_change' && (
+          <TextInput style={styles.input} placeholder="Target Floor to Send User To (e.g. 2)" placeholderTextColor="#94a3b8" keyboardType="numeric" value={targetFloor} onChangeText={setTargetFloor} />
+        )}
 
         {mode === 'gps' && (
           <View style={styles.row}>
@@ -173,10 +189,13 @@ export default function MasterScreen({ navigation }) {
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text style={{ color: '#8b5cf6', fontWeight: 'bold' }}>F{item.floor || 1}</Text>
-                {mode === 'indoor' && <Text style={{ color: '#3b82f6', fontWeight: 'bold' }}>{index + 1}.</Text>}
+                {mode === 'indoor' && <Text style={{ color: '#3b82f6', fontWeight: 'bold' }}>
+                  {index + 1}. {item.nodeType === 'direction' ? '➡️' : item.nodeType === 'floor_change' ? '📶' : '🎨'}
+                </Text>}
                 <Text style={styles.targetName}>{item.name}</Text>
               </View>
               {mode === 'gps' && <Text style={{ color: '#94a3b8', fontSize: 12 }}>{item.lat.toFixed(5)}, {item.lng.toFixed(5)}</Text>}
+              {mode === 'indoor' && item.nodeType === 'floor_change' && <Text style={{ color: '#10b981', fontSize: 12 }}>Sends to F{item.targetFloor}</Text>}
             </View>
             <View style={{ flexDirection: 'row', gap: 16 }}>
               <TouchableOpacity onPress={() => playTestAudio(item.audioUrl)}><Volume2 color="#3b82f6" size={20} /></TouchableOpacity>
@@ -208,5 +227,8 @@ const styles = StyleSheet.create({
   btnPrimary: { backgroundColor: '#10b981', padding: 14, borderRadius: 8, alignItems: 'center', marginTop: 8 },
   btnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   targetCard: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#1e293b', padding: 16, borderRadius: 8, marginBottom: 12, alignItems: 'center' },
-  targetName: { color: '#f8fafc', fontSize: 16, fontWeight: '600' }
+  targetName: { color: '#f8fafc', fontSize: 16, fontWeight: '600' },
+  typeBtn: { flex: 1, backgroundColor: '#334155', padding: 10, borderRadius: 6, alignItems: 'center' },
+  activeTypeBtn: { backgroundColor: '#8b5cf6' },
+  typeBtnText: { color: '#fff', fontSize: 12, fontWeight: 'bold' }
 });
