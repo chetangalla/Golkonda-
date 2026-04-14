@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView } from '
 import * as Location from 'expo-location';
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
-import { MapPin, Navigation, Volume2, Music, Footprints, Play, ChevronRight, CornerUpRight, ArrowUpCircle } from 'lucide-react-native';
+import { MapPin, Navigation, Volume2, Music, Footprints, Play, ChevronRight, CornerUpRight, ArrowUpCircle, Mic } from 'lucide-react-native';
 import { getTargets, getExhibits } from '../utils/dataStore';
 import { calculateDistance } from '../utils/geo';
 
@@ -29,6 +29,10 @@ export default function UserScreen({ route, navigation }) {
   // Common State
   const [errorMsg, setErrorMsg] = useState('');
   const [nowPlaying, setNowPlaying] = useState(null);
+  
+  // Verification State
+  const [verificationState, setVerificationState] = useState('idle'); // 'idle' | 'delaying' | 'speaking' | 'listening'
+  const [delayCountdown, setDelayCountdown] = useState(0);
 
   // Refs
   const lastPlayedRef = useRef({});
@@ -40,6 +44,7 @@ export default function UserScreen({ route, navigation }) {
   const indoorIndexRef = useRef(0);
   const exhibitsRef   = useRef([]);
   const currentFloorRef = useRef(1);
+  const countdownIntervalRef = useRef(null);
 
   useEffect(() => {
     indoorIndexRef.current = indoorIndex;
@@ -74,11 +79,13 @@ export default function UserScreen({ route, navigation }) {
   };
 
   const stopAll = async () => {
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     if (soundRef.current) {
       try { await soundRef.current.unloadAsync(); } catch (_) {}
       soundRef.current = null;
     }
     setNowPlaying(null);
+    Speech.stop();
   };
 
   const playAudio = async (url, name, onFinish = null) => {
@@ -184,19 +191,79 @@ export default function UserScreen({ route, navigation }) {
   // INDOOR TOUR LOGIC
   // ==============================
 
+  const triggerPlayback = (exhibit) => {
+    playAudio(exhibit.audioUrl, exhibit.name);
+
+    if (exhibit.nodeType === 'floor_change') {
+      const target = exhibit.targetFloor || currentFloor + 1;
+      setCurrentFloor(target);
+      setIndoorIndex(0);
+    } else {
+      setIndoorIndex(indoorIndex + 1);
+    }
+  };
+
+  const startVerificationPrompt = (exhibit) => {
+    setVerificationState('speaking');
+    Speech.speak(exhibit.verificationPrompt, {
+      onDone: () => startListeningSimulation(exhibit)
+    });
+  };
+
   const handlePlayNext = () => {
     const currentFloorExhibits = exhibits.filter(e => String(e.floor || 1) === String(currentFloor) && e.parentGpsId === activeGpsId);
     const exhibit = currentFloorExhibits[indoorIndex];
     if (exhibit) {
-      playAudio(exhibit.audioUrl, exhibit.name);
+      const delay = Number(exhibit.delaySeconds || 0);
 
-      if (exhibit.nodeType === 'floor_change') {
-        const target = exhibit.targetFloor || currentFloor + 1;
-        setCurrentFloor(target);
-        setIndoorIndex(0);
+      if (delay > 0) {
+        setVerificationState('delaying');
+        setDelayCountdown(delay);
+        let timeLeft = delay;
+        countdownIntervalRef.current = setInterval(() => {
+          timeLeft -= 1;
+          setDelayCountdown(timeLeft);
+          if (timeLeft <= 0) {
+            clearInterval(countdownIntervalRef.current);
+            if (exhibit.verificationPrompt) {
+              startVerificationPrompt(exhibit);
+            } else {
+              setVerificationState('idle');
+              triggerPlayback(exhibit);
+            }
+          }
+        }, 1000);
+      } else if (exhibit.verificationPrompt) {
+        startVerificationPrompt(exhibit);
       } else {
-        setIndoorIndex(indoorIndex + 1);
+        triggerPlayback(exhibit);
       }
+    }
+  };
+
+  const startListeningSimulation = async (exhibit) => {
+    setVerificationState('listening');
+    // Simulate recording for 3 seconds, then naturally detecting "yes"
+    setTimeout(() => {
+      // Must check if user hasn't cancelled out
+      setVerificationState(prev => {
+        if (prev === 'listening') {
+          triggerPlayback(exhibit);
+          return 'idle';
+        }
+        return prev;
+      });
+    }, 3000);
+  };
+
+  const manualConfirm = () => {
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    setVerificationState('idle');
+    const currentFloorExhibits = exhibits.filter(e => String(e.floor || 1) === String(currentFloor) && e.parentGpsId === activeGpsId);
+    const exhibit = currentFloorExhibits[indoorIndex];
+    if (exhibit) {
+      Speech.stop();
+      triggerPlayback(exhibit);
     }
   };
 
@@ -262,7 +329,7 @@ export default function UserScreen({ route, navigation }) {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Audio Tour</Text>
-        <TouchableOpacity onPress={() => { stopAll(); navigation.replace('Login'); }}>
+        <TouchableOpacity onPress={() => { stopAll(); setVerificationState('idle'); navigation.replace('Login'); }}>
           <Text style={{ color: '#ef4444' }}>Exit</Text>
         </TouchableOpacity>
       </View>
@@ -278,7 +345,7 @@ export default function UserScreen({ route, navigation }) {
 
       {errorMsg ? <Text style={{ color: 'red', marginBottom: 10 }}>{errorMsg}</Text> : null}
 
-      {nowPlaying && (
+      {nowPlaying && verificationState === 'idle' && (
         <View style={styles.nowPlayingCard}>
           <Music color="#10b981" size={18} style={{marginRight: 8}}/>
           <View style={{ flex: 1 }}>
@@ -286,6 +353,29 @@ export default function UserScreen({ route, navigation }) {
             <Text style={{ color: '#f8fafc', fontSize: 14 }}>{nowPlaying}</Text>
           </View>
           <TouchableOpacity onPress={stopAll} style={styles.stopBtn}><Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>Stop</Text></TouchableOpacity>
+        </View>
+      )}
+
+      {verificationState !== 'idle' && (
+        <View style={styles.verificationCard}>
+          <View style={styles.pulseDot} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#8b5cf6', fontWeight: 'bold', fontSize: 13, marginBottom: 4 }}>
+              {verificationState === 'delaying' ? 'WALKING...' : verificationState === 'speaking' ? 'ASKING...' : 'LISTENING...'}
+            </Text>
+            <Text style={{ color: '#f8fafc', fontSize: 16 }}>
+              {verificationState === 'delaying' ? `Audio activates in ${delayCountdown} seconds` : 
+               verificationState === 'speaking' ? `"${nextExhibit?.verificationPrompt}"` : 
+               'Say "Yes" to confirm location'}
+            </Text>
+          </View>
+          {verificationState === 'listening' ? (
+            <Mic color="#8b5cf6" size={28} />
+          ) : verificationState === 'delaying' ? (
+            <Footprints color="#8b5cf6" size={24} />
+          ) : (
+            <Volume2 color="#8b5cf6" size={24} />
+          )}
         </View>
       )}
 
@@ -352,10 +442,16 @@ export default function UserScreen({ route, navigation }) {
               {nextExhibit ? (
                 <>
                   <Text style={{color: '#f8fafc', fontSize: 20, fontWeight: 'bold', marginBottom: 16}}>{nextExhibit.name}</Text>
-                  <TouchableOpacity style={styles.actionBtn} onPress={handlePlayNext}>
-                    <Play color="#fff" size={16} style={{marginRight: 8}}/>
-                    <Text style={{color: 'white', fontWeight: 'bold'}}>Play & Continue</Text>
-                  </TouchableOpacity>
+                  {verificationState === 'idle' ? (
+                    <TouchableOpacity style={styles.actionBtn} onPress={handlePlayNext}>
+                      <Play color="#fff" size={16} style={{marginRight: 8}}/>
+                      <Text style={{color: 'white', fontWeight: 'bold'}}>Play & Continue</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#475569' }]} onPress={manualConfirm}>
+                      <Text style={{color: 'white', fontWeight: 'bold'}}>Click here to confirm</Text>
+                    </TouchableOpacity>
+                  )}
                 </>
               ) : (
                 <Text style={{color: '#10b981', fontSize: 18, fontWeight: 'bold'}}>Floor Complete!</Text>
@@ -402,5 +498,7 @@ const styles = StyleSheet.create({
   indoorCard: { backgroundColor: 'rgba(30, 41, 59, 0.7)', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(51, 65, 85, 0.8)', marginBottom: 16 },
   actionBtn: { flexDirection: 'row', backgroundColor: '#10b981', padding: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   floorRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16, justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', paddingTop: 16 },
-  floorBtn: { backgroundColor: '#3b82f6', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 }
+  floorBtn: { backgroundColor: '#3b82f6', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 },
+  verificationCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(30, 41, 59, 0.9)', borderWidth: 1, borderColor: '#8b5cf6', padding: 16, borderRadius: 12, marginBottom: 16, shadowColor: '#8b5cf6', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 5 },
+  pulseDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#8b5cf6', marginRight: 12 }
 });

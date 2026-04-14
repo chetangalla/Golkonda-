@@ -26,6 +26,8 @@ export default function MasterScreen({ navigation }) {
   const [nodeType, setNodeType] = useState('exhibit'); // 'exhibit' | 'direction' | 'floor_change'
   const [targetFloor, setTargetFloor] = useState('2');
   const [parentGpsId, setParentGpsId] = useState('');
+  const [verificationPrompt, setVerificationPrompt] = useState('');
+  const [delaySeconds, setDelaySeconds] = useState('0');
   const [recording, setRecording] = useState(null);
   const [audioUri, setAudioUri] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -103,10 +105,12 @@ export default function MasterScreen({ navigation }) {
       } else {
         const orderIndex = exhibits.length > 0 ? exhibits[exhibits.length - 1].orderIndex + 1 : 1;
         const parsedTargetFloor = parseInt(targetFloor, 10) || 2;
-        const newExhibit = await addExhibit(name, audioUri, orderIndex, parsedFloor, nodeType, parsedTargetFloor, parentGpsId);
+        const newExhibit = await addExhibit(name, audioUri, orderIndex, parsedFloor, nodeType, parsedTargetFloor, parentGpsId, verificationPrompt, Number(delaySeconds) || 0);
         setExhibits([...exhibits, newExhibit]);
       }
       setName('');
+      setVerificationPrompt('');
+      setDelaySeconds('0');
       setAudioUri(null);
     } catch (err) {
       Alert.alert('Error', 'Failed to save.');
@@ -202,6 +206,13 @@ export default function MasterScreen({ navigation }) {
 
         {mode === 'indoor' && nodeType === 'floor_change' && (
           <TextInput style={styles.input} placeholder="Target Floor to Send User To (e.g. 2)" placeholderTextColor="#94a3b8" keyboardType="numeric" value={targetFloor} onChangeText={setTargetFloor} />
+        )}
+
+        {mode === 'indoor' && (
+          <>
+            <TextInput style={styles.input} placeholder="Verification Prompt (e.g., Have you reached?)" placeholderTextColor="#94a3b8" value={verificationPrompt} onChangeText={setVerificationPrompt} />
+            <TextInput style={styles.input} placeholder="Walking Delay Before Prompt (Seconds)" placeholderTextColor="#94a3b8" keyboardType="numeric" value={delaySeconds} onChangeText={setDelaySeconds} />
+          </>
         )}
 
         {mode === 'gps' && (

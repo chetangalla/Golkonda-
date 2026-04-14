@@ -147,7 +147,7 @@ export async function getExhibits() {
   }
 }
 
-export async function addExhibit(name, audioUri, orderIndex, floor = 1, nodeType = 'exhibit', targetFloor = null, parentGpsId = null) {
+export async function addExhibit(name, audioUri, orderIndex, floor = 1, nodeType = 'exhibit', targetFloor = null, parentGpsId = null, verificationPrompt = '', delaySeconds = 0) {
   let audioUrl = audioUri;
 
   if (db && storage && audioUri) {
@@ -159,13 +159,13 @@ export async function addExhibit(name, audioUri, orderIndex, floor = 1, nodeType
       audioUrl = await getDownloadURL(fileRef);
     }
     
-    const newExhibit = { name, audioUrl, orderIndex, floor, nodeType, targetFloor, parentGpsId };
+    const newExhibit = { name, audioUrl, orderIndex, floor, nodeType, targetFloor, parentGpsId, verificationPrompt, delaySeconds };
     const docRef = await addDoc(collection(db, 'indoor_exhibits'), newExhibit);
     return { id: docRef.id, ...newExhibit };
   } else {
     const stored = await AsyncStorage.getItem(INDOOR_KEY);
     const exhibits = stored ? JSON.parse(stored) : [];
-    const newExhibit = { id: Date.now().toString(), name, audioUrl, orderIndex, floor, nodeType, targetFloor, parentGpsId };
+    const newExhibit = { id: Date.now().toString(), name, audioUrl, orderIndex, floor, nodeType, targetFloor, parentGpsId, verificationPrompt, delaySeconds };
     exhibits.push(newExhibit);
     await AsyncStorage.setItem(INDOOR_KEY, JSON.stringify(exhibits));
     return newExhibit;
