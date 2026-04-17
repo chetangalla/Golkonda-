@@ -45,6 +45,8 @@ export default function UserScreen({ route, navigation }) {
   const exhibitsRef   = useRef([]);
   const currentFloorRef = useRef(1);
   const countdownIntervalRef = useRef(null);
+  const modeRef = useRef('gps');
+  useEffect(() => { modeRef.current = mode; }, [mode]);
 
   useEffect(() => {
     indoorIndexRef.current = indoorIndex;
@@ -191,15 +193,32 @@ export default function UserScreen({ route, navigation }) {
   // INDOOR TOUR LOGIC
   // ==============================
 
+  const autoPlayNext = () => {
+    if (modeRef.current !== 'indoor') return;
+    const currentFloorExhibits = exhibitsRef.current.filter(e => String(e.floor || 1) === String(currentFloorRef.current) && e.parentGpsId === activeGpsId);
+    
+    if (indoorIndexRef.current >= currentFloorExhibits.length) return; 
+    
+    const nextExhibit = currentFloorExhibits[indoorIndexRef.current];
+    if (nextExhibit) {
+      startExhibitFlow(nextExhibit);
+    }
+  };
+
   const triggerPlayback = (exhibit) => {
-    playAudio(exhibit.audioUrl, exhibit.name);
+    playAudio(exhibit.audioUrl, exhibit.name, () => {
+       autoPlayNext(); // Auto play next item when audio finishes
+    });
 
     if (exhibit.nodeType === 'floor_change') {
-      const target = exhibit.targetFloor || currentFloor + 1;
+      const target = exhibit.targetFloor || currentFloorRef.current + 1;
       setCurrentFloor(target);
+      currentFloorRef.current = target;
       setIndoorIndex(0);
+      indoorIndexRef.current = 0;
     } else {
-      setIndoorIndex(indoorIndex + 1);
+      setIndoorIndex(indoorIndexRef.current + 1);
+      indoorIndexRef.current = indoorIndexRef.current + 1;
     }
   };
 
@@ -210,35 +229,38 @@ export default function UserScreen({ route, navigation }) {
     });
   };
 
+  const startExhibitFlow = (exhibit) => {
+    if (!exhibit) return;
+    const delay = Number(exhibit.delaySeconds || 0);
+
+    if (delay > 0) {
+      setVerificationState('delaying');
+      setDelayCountdown(delay);
+      let timeLeft = delay;
+      countdownIntervalRef.current = setInterval(() => {
+        timeLeft -= 1;
+        setDelayCountdown(timeLeft);
+        if (timeLeft <= 0) {
+          clearInterval(countdownIntervalRef.current);
+          if (exhibit.verificationPrompt) {
+            startVerificationPrompt(exhibit);
+          } else {
+            setVerificationState('idle');
+            triggerPlayback(exhibit);
+          }
+        }
+      }, 1000);
+    } else if (exhibit.verificationPrompt) {
+      startVerificationPrompt(exhibit);
+    } else {
+      triggerPlayback(exhibit);
+    }
+  };
+
   const handlePlayNext = () => {
     const currentFloorExhibits = exhibits.filter(e => String(e.floor || 1) === String(currentFloor) && e.parentGpsId === activeGpsId);
     const exhibit = currentFloorExhibits[indoorIndex];
-    if (exhibit) {
-      const delay = Number(exhibit.delaySeconds || 0);
-
-      if (delay > 0) {
-        setVerificationState('delaying');
-        setDelayCountdown(delay);
-        let timeLeft = delay;
-        countdownIntervalRef.current = setInterval(() => {
-          timeLeft -= 1;
-          setDelayCountdown(timeLeft);
-          if (timeLeft <= 0) {
-            clearInterval(countdownIntervalRef.current);
-            if (exhibit.verificationPrompt) {
-              startVerificationPrompt(exhibit);
-            } else {
-              setVerificationState('idle');
-              triggerPlayback(exhibit);
-            }
-          }
-        }, 1000);
-      } else if (exhibit.verificationPrompt) {
-        startVerificationPrompt(exhibit);
-      } else {
-        triggerPlayback(exhibit);
-      }
-    }
+    startExhibitFlow(exhibit);
   };
 
   const startListeningSimulation = async (exhibit) => {
