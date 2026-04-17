@@ -129,8 +129,9 @@ export default function UserScreen({ route, navigation }) {
           setCurrentLoc({ lat, lng });
 
           getTargets().then(latestTargets => {
-            setTargets(latestTargets);
-            checkProximity(lat, lng, latestTargets);
+            const filteredTargets = monumentId ? latestTargets.filter(t => t.parentMonumentId === monumentId) : latestTargets;
+            setTargets(filteredTargets);
+            checkProximity(lat, lng, filteredTargets);
             prevLocRef.current = { lat, lng };
           });
         }
