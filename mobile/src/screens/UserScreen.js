@@ -182,9 +182,19 @@ export default function UserScreen({ route, navigation }) {
         if (hasIndoorTour) {
           setMode('indoor');
           setActiveGpsId(target.id);
-          setCurrentFloor(Number(target.floor || 1));
+          const f = Number(target.floor || 1);
+          setCurrentFloor(f);
+          currentFloorRef.current = f;
           setIndoorIndex(0);
-          Speech.speak("Please go inside to start your indoor tour.");
+          indoorIndexRef.current = 0;
+          Speech.speak("Please go inside to start your indoor tour.", {
+            onDone: () => {
+              const currentFloorExhibits = exhibitsRef.current.filter(e => String(e.floor || 1) === String(f) && e.parentGpsId === target.id);
+              if (currentFloorExhibits.length > 0) {
+                startExhibitFlow(currentFloorExhibits[0]);
+              }
+            }
+          });
         }
       });
     });

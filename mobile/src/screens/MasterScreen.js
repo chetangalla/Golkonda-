@@ -103,6 +103,11 @@ export default function MasterScreen({ navigation }) {
         const newTarget = await addTarget(name, locData.lat, locData.lng, audioUri, parsedFloor, activeMonumentId);
         setTargets([...targets, newTarget]);
       } else {
+        if (!parentGpsId) {
+          setLoading(false);
+          Alert.alert('Missing Info', 'Please select a GPS target first. If there are none for this monument, create a GPS target first.');
+          return;
+        }
         const orderIndex = exhibits.length > 0 ? exhibits[exhibits.length - 1].orderIndex + 1 : 1;
         const parsedTargetFloor = parseInt(targetFloor, 10) || 2;
         const newExhibit = await addExhibit(name, audioUri, orderIndex, parsedFloor, nodeType, parsedTargetFloor, parentGpsId, verificationPrompt, Number(delaySeconds) || 0);
@@ -169,7 +174,11 @@ export default function MasterScreen({ navigation }) {
             <Text style={{ color: '#94a3b8', fontSize: 12, marginBottom: 8, fontWeight: 'bold' }}>BELONGS TO MONUMENT:</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
               {monuments.map(m => (
-                <TouchableOpacity key={m.id} style={[styles.typeBtn, { paddingHorizontal: 16, paddingVertical: 12 }, activeMonumentId === m.id && styles.activeTypeBtn]} onPress={() => setActiveMonumentId(m.id)}>
+                <TouchableOpacity key={m.id} style={[styles.typeBtn, { paddingHorizontal: 16, paddingVertical: 12 }, activeMonumentId === m.id && styles.activeTypeBtn]} onPress={() => {
+                   setActiveMonumentId(m.id);
+                   const matching = targets.filter(t => t.parentMonumentId === m.id);
+                   setParentGpsId(matching.length > 0 ? matching[0].id : '');
+                }}>
                   <Text style={styles.typeBtnText}>{m.name}</Text>
                 </TouchableOpacity>
               ))}
