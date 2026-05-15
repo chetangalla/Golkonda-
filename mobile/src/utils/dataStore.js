@@ -6,25 +6,26 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 const LOCAL_KEY = '@audio_targets';
 const USERS_KEY = '@users';
 const MONUMENTS_KEY = '@monuments';
+const GPS_DIRECTIONS_KEY = '@gps_directions';
 
 // ======================= AUTH ========================
-export async function registerUser(name, email, phone, password) {
+export async function registerUser(name, email, phone) {
   const stored = await AsyncStorage.getItem(USERS_KEY);
   const users = stored ? JSON.parse(stored) : [];
   if (users.find(u => u.email.toLowerCase() === email.toLowerCase())) {
     throw new Error('Email already registered');
   }
-  const newUser = { id: Date.now().toString(), name, email, phone, password };
+  const newUser = { id: Date.now().toString(), name, email, phone };
   users.push(newUser);
   await AsyncStorage.setItem(USERS_KEY, JSON.stringify(users));
   return newUser;
 }
 
-export async function loginUser(email, password) {
+export async function loginUser(email) {
   const stored = await AsyncStorage.getItem(USERS_KEY);
   const users = stored ? JSON.parse(stored) : [];
-  const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
-  if (!user) throw new Error('Invalid email or password');
+  const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+  if (!user) throw new Error('Email not found. Please sign up first.');
   return user;
 }
 
@@ -87,7 +88,7 @@ export async function getTargets() {
   }
 }
 
-export async function addTarget(name, lat, lng, audioUri, floor = 1, parentMonumentId = null) {
+export async function addTarget(name, lat, lng, audioUri, floor = 1, parentMonumentId = null, triggerRadius = 7) {
   let audioUrl = audioUri;
 
   if (db && storage && audioUri) {
@@ -99,13 +100,13 @@ export async function addTarget(name, lat, lng, audioUri, floor = 1, parentMonum
       audioUrl = await getDownloadURL(fileRef);
     }
     
-    const newTarget = { name, lat, lng, audioUrl, floor, parentMonumentId };
+    const newTarget = { name, lat, lng, audioUrl, floor, parentMonumentId, triggerRadius };
     const docRef = await addDoc(collection(db, 'targets'), newTarget);
     return { id: docRef.id, ...newTarget };
   } else {
     const stored = await AsyncStorage.getItem(LOCAL_KEY);
     const targets = stored ? JSON.parse(stored) : [];
-    const newTarget = { id: Date.now().toString(), name, lat, lng, audioUrl, floor, parentMonumentId };
+    const newTarget = { id: Date.now().toString(), name, lat, lng, audioUrl, floor, parentMonumentId, triggerRadius };
     targets.push(newTarget);
     await AsyncStorage.setItem(LOCAL_KEY, JSON.stringify(targets));
     return newTarget;
@@ -120,6 +121,54 @@ export async function deleteTarget(id) {
     const targets = stored ? JSON.parse(stored) : [];
     const filtered = targets.filter(t => t.id !== id);
     await AsyncStorage.setItem(LOCAL_KEY, JSON.stringify(filtered));
+  }
+}
+
+// ===================== GPS DIRECTIONS =====================
+
+export async function getGpsDirections() {
+  if (db) {
+    const snap = await getDocs(collection(db, 'gps_directions'));
+    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => (a.delaySeconds || 0) - (b.delaySeconds || 0));
+  } else {
+    const stored = await AsyncStorage.getItem(GPS_DIRECTIONS_KEY);
+    const directions = stored ? JSON.parse(stored) : [];
+    return directions.sort((a, b) => (a.delaySeconds || 0) - (b.delaySeconds || 0));
+  }
+}
+
+export async function addGpsDirection(name, audioUri, parentGpsId, delaySeconds = 0) {
+  let audioUrl = audioUri;
+
+  if (db && storage && audioUri) {
+    if (audioUri.startsWith('file://')) {
+      const response = await fetch(audioUri);
+      const blob = await response.blob();
+      const fileRef = ref(storage, `gps_directions/${Date.now()}.m4a`);
+      await uploadBytes(fileRef, blob);
+      audioUrl = await getDownloadURL(fileRef);
+    }
+    
+    const newDir = { name, audioUrl, parentGpsId, delaySeconds };
+    const docRef = await addDoc(collection(db, 'gps_directions'), newDir);
+    return { id: docRef.id, ...newDir };
+  } else {
+    const stored = await AsyncStorage.getItem(GPS_DIRECTIONS_KEY);
+    const directions = stored ? JSON.parse(stored) : [];
+    const newDir = { id: Date.now().toString(), name, audioUrl, parentGpsId, delaySeconds };
+    directions.push(newDir);
+    await AsyncStorage.setItem(GPS_DIRECTIONS_KEY, JSON.stringify(directions));
+    return newDir;
+  }
+}
+
+export async function deleteGpsDirection(id) {
+  if (db) {
+    await deleteDoc(doc(db, 'gps_directions', id));
+  } else {
+    const stored = await AsyncStorage.getItem(GPS_DIRECTIONS_KEY);
+    const directions = stored ? JSON.parse(stored) : [];
+    await AsyncStorage.setItem(GPS_DIRECTIONS_KEY, JSON.stringify(directions.filter(d => d.id !== id)));
   }
 }
 

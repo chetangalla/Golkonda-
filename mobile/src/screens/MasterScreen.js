@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet, FlatList, Alert, ActivityIndicator, ScrollView } from 'react-native';
 import { Audio } from 'expo-av';
 import * as Location from 'expo-location';
-import { MapPin, Mic, Square, Trash2, Volume2, Footprints } from 'lucide-react-native';
-import { getTargets, addTarget, deleteTarget, getExhibits, addExhibit, deleteExhibit, getMonuments, addMonument, deleteMonument } from '../utils/dataStore';
+import * as DocumentPicker from 'expo-document-picker';
+import { MapPin, Mic, Square, Trash2, Volume2, Footprints, Upload } from 'lucide-react-native';
+import { getTargets, addTarget, deleteTarget, getExhibits, addExhibit, deleteExhibit, getMonuments, addMonument, deleteMonument, getGpsDirections, addGpsDirection, deleteGpsDirection } from '../utils/dataStore';
 
 export default function MasterScreen({ navigation }) {
   const [mode, setMode] = useState('monument'); // 'monument' | 'gps' | 'indoor'
@@ -20,6 +21,9 @@ export default function MasterScreen({ navigation }) {
   // Indoor State
   const [exhibits, setExhibits] = useState([]);
 
+  // GPS Directions State
+  const [gpsDirections, setGpsDirections] = useState([]);
+
   // Shared Form State
   const [name, setName] = useState('');
   const [floor, setFloor] = useState('1');
@@ -28,6 +32,7 @@ export default function MasterScreen({ navigation }) {
   const [parentGpsId, setParentGpsId] = useState('');
   const [verificationPrompt, setVerificationPrompt] = useState('');
   const [delaySeconds, setDelaySeconds] = useState('0');
+  const [triggerRadius, setTriggerRadius] = useState('7');
   const [recording, setRecording] = useState(null);
   const [audioUri, setAudioUri] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -53,6 +58,20 @@ export default function MasterScreen({ navigation }) {
     
     const eData = await getExhibits();
     setExhibits(eData);
+
+    const dirData = await getGpsDirections();
+    setGpsDirections(dirData);
+  };
+
+  const pickAudio = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: 'audio/*' });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setAudioUri(result.assets[0].uri);
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Failed to pick audio file.');
+    }
   };
 
   const startRecording = async () => {
@@ -100,8 +119,16 @@ export default function MasterScreen({ navigation }) {
         const newMon = await addMonument(name);
         setMonuments([...monuments, newMon]);
       } else if (mode === 'gps') {
-        const newTarget = await addTarget(name, locData.lat, locData.lng, audioUri, parsedFloor, activeMonumentId);
+        const newTarget = await addTarget(name, locData.lat, locData.lng, audioUri, parsedFloor, activeMonumentId, parseInt(triggerRadius, 10) || 7);
         setTargets([...targets, newTarget]);
+      } else if (mode === 'gps_direction') {
+        if (!parentGpsId) {
+          setLoading(false);
+          Alert.alert('Missing Info', 'Please select a GPS target first.');
+          return;
+        }
+        const newDir = await addGpsDirection(name, audioUri, parentGpsId, Number(delaySeconds) || 0);
+        setGpsDirections([...gpsDirections, newDir]);
       } else {
         if (!parentGpsId) {
           setLoading(false);
@@ -131,6 +158,9 @@ export default function MasterScreen({ navigation }) {
     } else if (mode === 'gps') {
       await deleteTarget(id);
       setTargets(targets.filter(t => t.id !== id));
+    } else if (mode === 'gps_direction') {
+      await deleteGpsDirection(id);
+      setGpsDirections(gpsDirections.filter(d => d.id !== id));
     } else {
       await deleteExhibit(id);
       setExhibits(exhibits.filter(e => e.id !== id));
@@ -161,15 +191,18 @@ export default function MasterScreen({ navigation }) {
         <TouchableOpacity style={[styles.tab, mode === 'gps' && styles.activeTab]} onPress={() => setMode('gps')}>
           <Text style={styles.tabText}>GPS Targets</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={[styles.tab, mode === 'gps_direction' && styles.activeTab]} onPress={() => setMode('gps_direction')}>
+          <Text style={styles.tabText}>GPS Directions</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={[styles.tab, mode === 'indoor' && styles.activeTab]} onPress={() => setMode('indoor')}>
           <Text style={styles.tabText}>Indoor Tour</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.formCard}>
-        <Text style={styles.subtitle}>{mode === 'monument' ? 'New Monument' : mode === 'gps' ? 'New GPS Target' : 'New Indoor Step'}</Text>
+        <Text style={styles.subtitle}>{mode === 'monument' ? 'New Monument' : mode === 'gps' ? 'New GPS Target' : mode === 'gps_direction' ? 'New Walking Direction' : 'New Indoor Step'}</Text>
         
-        {(mode === 'gps' || mode === 'indoor') && monuments.length > 0 && (
+        {(mode === 'gps' || mode === 'gps_direction' || mode === 'indoor') && monuments.length > 0 && (
           <View style={{ marginBottom: 16 }}>
             <Text style={{ color: '#94a3b8', fontSize: 12, marginBottom: 8, fontWeight: 'bold' }}>BELONGS TO MONUMENT:</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -194,7 +227,7 @@ export default function MasterScreen({ navigation }) {
           </View>
         )}
 
-        {mode === 'indoor' && targets.length > 0 && (
+        {(mode === 'indoor' || mode === 'gps_direction') && targets.length > 0 && (
           <View style={{ marginBottom: 16 }}>
             <Text style={{ color: '#94a3b8', fontSize: 12, marginBottom: 8, fontWeight: 'bold' }}>BELONGS TO GPS TARGET:</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -207,9 +240,9 @@ export default function MasterScreen({ navigation }) {
           </View>
         )}
 
-        <TextInput style={styles.input} placeholder={mode === 'monument' ? "Monument Name (e.g. Louvre)" : mode === 'gps' ? "GPS Name" : "Instruction / Exhibit Name"} placeholderTextColor="#94a3b8" value={name} onChangeText={setName} />
+        <TextInput style={styles.input} placeholder={mode === 'monument' ? "Monument Name (e.g. Louvre)" : mode === 'gps' ? "GPS Name" : mode === 'gps_direction' ? "Direction (e.g. Take Left)" : "Instruction / Exhibit Name"} placeholderTextColor="#94a3b8" value={name} onChangeText={setName} />
         
-        {mode !== 'monument' && (
+        {mode !== 'monument' && mode !== 'gps_direction' && (
           <TextInput style={styles.input} placeholder="Floor Number (e.g. 1)" placeholderTextColor="#94a3b8" keyboardType="numeric" value={floor} onChangeText={setFloor} />
         )}
 
@@ -218,10 +251,15 @@ export default function MasterScreen({ navigation }) {
         )}
 
         {mode === 'indoor' && (
-          <>
-            <TextInput style={styles.input} placeholder="Verification Prompt (e.g., Have you reached?)" placeholderTextColor="#94a3b8" value={verificationPrompt} onChangeText={setVerificationPrompt} />
-            <TextInput style={styles.input} placeholder="Walking Delay Before Prompt (Seconds)" placeholderTextColor="#94a3b8" keyboardType="numeric" value={delaySeconds} onChangeText={setDelaySeconds} />
-          </>
+          <TextInput style={styles.input} placeholder="Verification Prompt (e.g., Have you reached?)" placeholderTextColor="#94a3b8" value={verificationPrompt} onChangeText={setVerificationPrompt} />
+        )}
+
+        {(mode === 'indoor' || mode === 'gps_direction') && (
+          <TextInput style={styles.input} placeholder="Walking Delay Before Audio Plays (Seconds)" placeholderTextColor="#94a3b8" keyboardType="numeric" value={delaySeconds} onChangeText={setDelaySeconds} />
+        )}
+
+        {mode === 'gps' && (
+          <TextInput style={styles.input} placeholder="Trigger Radius in Meters (e.g. 7)" placeholderTextColor="#94a3b8" keyboardType="numeric" value={triggerRadius} onChangeText={setTriggerRadius} />
         )}
 
         {mode === 'gps' && (
@@ -239,34 +277,42 @@ export default function MasterScreen({ navigation }) {
           <View style={styles.row}>
             <TouchableOpacity style={[styles.recordBtn, recording ? styles.recording : null]} onPress={recording ? stopRecording : startRecording}>
               {recording ? <Square color="#fff" size={16} /> : <Mic color="#fff" size={16} />}
-              <Text style={styles.actionBtnText}>{recording ? "Stop Recording" : audioUri ? "Re-record Audio" : "Record Audio Voice"}</Text>
+              <Text style={styles.actionBtnText}>{recording ? "Stop Recording" : "Record"}</Text>
             </TouchableOpacity>
-            {audioUri && !recording && <Text style={{ color: '#10b981', fontSize: 12 }}>✓ Saved</Text>}
+            
+            <TouchableOpacity style={[styles.recordBtn, { backgroundColor: '#3b82f6' }]} onPress={pickAudio}>
+              <Upload color="#fff" size={16} />
+              <Text style={styles.actionBtnText}>Upload File</Text>
+            </TouchableOpacity>
           </View>
         )}
+        
+        {audioUri && mode !== 'monument' && <Text style={{ color: '#10b981', fontSize: 12, marginBottom: 12 }}>✓ Audio Set</Text>}
 
         <TouchableOpacity style={styles.btnPrimary} onPress={handleSave} disabled={loading}>
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Save Item</Text>}
         </TouchableOpacity>
       </View>
 
-      <Text style={[styles.subtitle, { marginBottom: 12 }]}>{mode === 'monument' ? 'Saved Monuments' : mode === 'gps' ? 'Database Targets' : 'Indoor Tour Sequence'}</Text>
+      <Text style={[styles.subtitle, { marginBottom: 12 }]}>{mode === 'monument' ? 'Saved Monuments' : mode === 'gps' ? 'Database Targets' : mode === 'gps_direction' ? 'GPS Directions' : 'Indoor Tour Sequence'}</Text>
       <FlatList
-        data={mode === 'monument' ? monuments : mode === 'gps' ? targets.filter(t=>t.parentMonumentId === activeMonumentId) : exhibits.filter(e=>targets.find(t=>t.id === e.parentGpsId)?.parentMonumentId === activeMonumentId)}
+        data={mode === 'monument' ? monuments : mode === 'gps' ? targets.filter(t=>t.parentMonumentId === activeMonumentId) : mode === 'gps_direction' ? gpsDirections.filter(d=>d.parentGpsId === parentGpsId) : exhibits.filter(e=>targets.find(t=>t.id === e.parentGpsId)?.parentMonumentId === activeMonumentId)}
         keyExtractor={item => item.id}
         renderItem={({ item, index }) => (
           <View style={styles.targetCard}>
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                {mode !== 'monument' && <Text style={{ color: '#8b5cf6', fontWeight: 'bold' }}>F{item.floor || 1}</Text>}
+                {(mode === 'gps' || mode === 'indoor') && <Text style={{ color: '#8b5cf6', fontWeight: 'bold' }}>F{item.floor || 1}</Text>}
                 {mode === 'indoor' && <Text style={{ color: '#3b82f6', fontWeight: 'bold' }}>
                   {index + 1}. {item.nodeType === 'direction' ? '➡️' : item.nodeType === 'floor_change' ? '📶' : '🎨'}
                 </Text>}
+                {mode === 'gps_direction' && <Text style={{ color: '#3b82f6', fontWeight: 'bold' }}>{index + 1}. ➡️</Text>}
                 <Text style={styles.targetName}>{item.name}</Text>
               </View>
-              {mode === 'gps' && <Text style={{ color: '#94a3b8', fontSize: 12 }}>{item.lat.toFixed(5)}, {item.lng.toFixed(5)}</Text>}
+              {mode === 'gps' && <Text style={{ color: '#94a3b8', fontSize: 12 }}>{item.lat.toFixed(5)}, {item.lng.toFixed(5)} • Rad: {item.triggerRadius || 7}m</Text>}
               {mode === 'indoor' && item.nodeType === 'floor_change' && <Text style={{ color: '#10b981', fontSize: 12 }}>Sends to F{item.targetFloor}</Text>}
               {mode === 'indoor' && <Text style={{ color: '#64748b', fontSize: 12 }}>GPS Match: {targets.find(t => t.id === item.parentGpsId)?.name || 'Unknown'}</Text>}
+              {mode === 'gps_direction' && <Text style={{ color: '#10b981', fontSize: 12 }}>Plays after {item.delaySeconds || 0}s delay</Text>}
             </View>
             <View style={{ flexDirection: 'row', gap: 16 }}>
               {mode !== 'monument' && <TouchableOpacity onPress={() => playTestAudio(item.audioUrl)}><Volume2 color="#3b82f6" size={20} /></TouchableOpacity>}

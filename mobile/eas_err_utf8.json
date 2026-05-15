@@ -1,0 +1,51 @@
+﻿{
+  "id": "b775c022-a2d8-4bbc-a39e-3a63832410bc",
+  "status": "ERRORED",
+  "platform": "ANDROID",
+  "error": {
+    "errorCode": "EAS_BUILD_UNKNOWN_GRADLE_ERROR",
+    "message": "Gradle build failed with unknown error. See logs for the \"Run gradlew\" phase for more information."
+  },
+  "artifacts": {},
+  "fingerprint": {
+    "id": "019db63a-1911-7ffd-870e-004fc7d7935c",
+    "hash": "92130d68d397f608e84dd7607e370c3c5e3e9199"
+  },
+  "initiatingActor": {
+    "id": "0cb1b838-b786-4129-82d9-de7e6f45ee6f",
+    "displayName": "chetangalla"
+  },
+  "logFiles": [
+    "https://job-logs.eascdn.net/production/b775c022-a2d8-4bbc-a39e-3a63832410bc/1776878754465-5ace3f5c-968d-41f4-8507-e051d8d29d55.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260422%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260422T174654Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=789633a1ef33c3d8e7249508a41845812753274a455cd8d92205ad80d894dadeb8370df065655fa777bb4b4ac930335064550824b29b09afe64d72ee8a570fab5ff4b9150e8e9918fe3299cdfa0e2f547da9654e40223ab8172662935d2bb81df8915391d58faacfd7c74d9b5cdc3dfff7dc20a4516da4fbe26372518380884bc852aea9b7e64b9a8f38ec5cd142a5e529a7bceae313ee7ac20218adb070cc8f59726389c8d93b9e8ef6a0db4e1ab600252eb612f28d6b3c295c99146611da90d45f991c61fd0b8f4361b4024ad86d7bd59d43961c426cbc4aa2363141e1b9a96a852ff7a0f91f104181d75ee8f1b8847e67a8ccd44e1d752a404071ac5fa7e4",
+    "https://job-logs.eascdn.net/production/b775c022-a2d8-4bbc-a39e-3a63832410bc/1776878765574-a084d77c-4649-423a-b95c-e4194066afc9.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260422%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260422T174654Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=a251aed719b0ec7c466bcadbebf47e8030d43f277c09336b66a87bf2e637e63359d1fb6bce99164f502650bda39f42b5319cbef0b4a789d2d9d3d5a95f1a114816cd1484db8685ff4809cf30fe1f052be5a765162282cbc0367f7b9f3d54ca7473516037ac50bbc82fa099f2ab7f9771f3917c3f266be21d5f83a91aeb3441f34e748e47359e400dcd35d7a04ed91165af749ad0cdad32cab0aba9e58d29d6e2e1fc7f1d25c5e7ffcc2c01149abbe0a9b6a6eb74d63cfff2097395fe1a76038d48fbcf2bb8d446ca12b93e18cf7d7811fa6efd4d64ec5412b3427e042ddaa9c0c60d81f8c8051de7c62686b660bc3c67121d0238a0b18d45ee6a618aa62c0780",
+    "https://job-logs.eascdn.net/production/b775c022-a2d8-4bbc-a39e-3a63832410bc/1776878765798-72769012-db2d-4a2e-a7a9-6b925534dba8.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260422%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260422T174654Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=6df79087068934aaaa46c765f6c6463e05cf0f1405d8836364d91555bb6309775362a3bde322d636fb2a61e900dcd69977b2ee1c9e6cf025e6a41c0c250034db1da5afb51bf8038ae82a94cca6cd4437d5d6c304f6ddad8caff68a828af383389d53d60cc18c089fc7695c287e279a2266d05fa39eef1c18fefc70a9d7392dadea047a9eece5d5fc290fca307a4014eb16207d6e58ff3e6761e7534fa58f6d8d50017b7f8be6e453773a4a019e8ea13546460ef5a2973fa682b0e8f298baa9da8ab510175f92b77aa8499e6582a4437363d74bf22b5ff897008cd4ad86fdabd3ac9d9c030a7ad7036574589eb366689b94e384a4750891f7c6d2e264c566cd7e",
+    "https://job-logs.eascdn.net/production/b775c022-a2d8-4bbc-a39e-3a63832410bc/1776878765975-39d83790-6d22-4f84-b74b-e1d1c4e180e6.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260422%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260422T174654Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=9ee0966429f443321e8435eff1243803b63c4fab9b46abaf875ebd8e47821da43aa319cb19cc3246e509b20f53fe26d9f66e8b34431e1dd1e86563db0de2e46eabd9cd5d9b2562417f2cf6093c51cb797ad292b11a93e5fa6f2ab93ce6fd6280490b60b06714f050b319cc28118f667b1fc094313624cd8d157cfffe5872e52128786546a7c815dcc82f9a86d7ba02f23317c818261b8da2ddadf9c0906cd267280efaca27111ea2b5843622299a8c80ec1dea71b227858576984f3a5b3b5760736c00760f1b676cbb2b5fd788c6be1c055c1e8cddc4774e592b0f735e97d305f16d137905045e1653912061a782678b61dd5def824e21820c1150e65fc91b59"
+  ],
+  "project": {
+    "id": "43303fee-7b98-4559-8c4a-da44f16e4795",
+    "name": "mobile",
+    "slug": "mobile",
+    "ownerAccount": {
+      "id": "d6665c95-909c-47ca-8001-e92803c7e8dc",
+      "name": "chetangalla"
+    }
+  },
+  "distribution": "STORE",
+  "buildProfile": "preview",
+  "sdkVersion": "54.0.0",
+  "appVersion": "1.0.0",
+  "appBuildVersion": "1",
+  "gitCommitHash": "aa73f21172696d2815e2d2382f6bdcaa81449638",
+  "gitCommitMessage": "merge main fixes into native voice",
+  "priority": "NORMAL_PLUS",
+  "createdAt": "2026-04-22T17:25:53.913Z",
+  "updatedAt": "2026-04-22T17:32:56.288Z",
+  "completedAt": "2026-04-22T17:32:51.714Z",
+  "expirationDate": "2026-05-22T17:25:54.040Z",
+  "isForIosSimulator": false,
+  "metrics": {
+    "buildWaitTime": 372,
+    "buildQueueTime": 59205,
+    "buildDuration": 357815
+  }
+}

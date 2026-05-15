@@ -6,17 +6,16 @@ export default function SignUpScreen({ navigation }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSignUp = async () => {
-    if (!name || !email || !password) {
-      Alert.alert('Missing Fields', 'Name, Email, and Password are required.');
+    if (!name || !email) {
+      Alert.alert('Missing Fields', 'Name and Email are required.');
       return;
     }
     setLoading(true);
     try {
-      await registerUser(name, email, phone, password);
+      await registerUser(name, email, phone);
       Alert.alert('Success', 'Account created successfully! Please login.');
       navigation.replace('Login');
     } catch (err) {
@@ -37,7 +36,6 @@ export default function SignUpScreen({ navigation }) {
             <TextInput style={styles.input} placeholder="Full Name" placeholderTextColor="#94a3b8" value={name} onChangeText={setName} />
             <TextInput style={styles.input} placeholder="Email Address" placeholderTextColor="#94a3b8" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={setEmail} />
             <TextInput style={styles.input} placeholder="Phone Number" placeholderTextColor="#94a3b8" keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
-            <TextInput style={styles.input} placeholder="Password" placeholderTextColor="#94a3b8" secureTextEntry value={password} onChangeText={setPassword} />
             
             <TouchableOpacity style={styles.btnPrimary} onPress={handleSignUp} disabled={loading}>
               <Text style={styles.btnText}>{loading ? 'Registering...' : 'Sign Up'}</Text>

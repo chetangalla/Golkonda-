@@ -4,26 +4,25 @@ import { loginUser } from '../utils/dataStore';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Missing Fields', 'Please enter email and password.');
+    if (!email) {
+      Alert.alert('Missing Field', 'Please enter your email.');
       return;
     }
     
     Keyboard.dismiss();
     
     // Hardcoded Master Admin Login
-    if (email.toLowerCase() === 'admin@tourist.com' && password === 'master123') {
+    if (email.toLowerCase() === 'admin@tourist.com') {
       navigation.replace('Master');
       return;
     }
 
     setLoading(true);
     try {
-      await loginUser(email, password);
+      await loginUser(email);
       navigation.replace('Home');
     } catch (err) {
       Alert.alert('Login Failed', err.message);
@@ -48,14 +47,6 @@ export default function LoginScreen({ navigation }) {
               autoCapitalize="none" 
               value={email} 
               onChangeText={setEmail} 
-            />
-            <TextInput 
-              style={styles.input} 
-              placeholder="Password" 
-              placeholderTextColor="#94a3b8" 
-              secureTextEntry 
-              value={password} 
-              onChangeText={setPassword} 
             />
             
             <TouchableOpacity style={styles.btnPrimary} onPress={handleLogin} disabled={loading}>

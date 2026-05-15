@@ -4,7 +4,7 @@ import * as Location from 'expo-location';
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
 import { MapPin, Navigation, Volume2, Music, Footprints, Play, ChevronRight, CornerUpRight, ArrowUpCircle, Mic } from 'lucide-react-native';
-import { getTargets, getExhibits } from '../utils/dataStore';
+import { getTargets, getExhibits, getGpsDirections } from '../utils/dataStore';
 import { calculateDistance } from '../utils/geo';
 
 const AUTO_PLAY_DISTANCE = 7;   
@@ -25,6 +25,8 @@ export default function UserScreen({ route, navigation }) {
   const [exhibits, setExhibits] = useState([]);
   const [indoorIndex, setIndoorIndex] = useState(0);
   const [activeGpsId, setActiveGpsId] = useState(null);
+  const [gpsDirections, setGpsDirections] = useState([]);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   // Common State
   const [errorMsg, setErrorMsg] = useState('');
@@ -45,8 +47,14 @@ export default function UserScreen({ route, navigation }) {
   const exhibitsRef   = useRef([]);
   const currentFloorRef = useRef(1);
   const countdownIntervalRef = useRef(null);
+  const audioQueueRef = useRef([]);
+  const isPlayingRef = useRef(false);
+  const directionTimeoutsRef = useRef([]);
+  const gpsDirectionsRef = useRef([]);
+  
   const modeRef = useRef('gps');
   useEffect(() => { modeRef.current = mode; }, [mode]);
+  useEffect(() => { gpsDirectionsRef.current = gpsDirections; }, [gpsDirections]);
 
   useEffect(() => {
     indoorIndexRef.current = indoorIndex;
@@ -63,12 +71,13 @@ export default function UserScreen({ route, navigation }) {
 
   useEffect(() => {
     stopAll();
+    if (!dataLoaded) return;
     if (mode === 'gps') {
       startTracking();
     } else {
       stopTracking();
     }
-  }, [mode]);
+  }, [mode, dataLoaded]);
 
   const loadData = async () => {
     const tData = await getTargets();
@@ -78,10 +87,19 @@ export default function UserScreen({ route, navigation }) {
     
     const eData = await getExhibits();
     setExhibits(eData);
+
+    const dirData = await getGpsDirections();
+    setGpsDirections(dirData);
+    setDataLoaded(true);
   };
 
   const stopAll = async () => {
     if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    directionTimeoutsRef.current.forEach(clearTimeout);
+    directionTimeoutsRef.current = [];
+    audioQueueRef.current = [];
+    isPlayingRef.current = false;
+    
     if (soundRef.current) {
       try { await soundRef.current.unloadAsync(); } catch (_) {}
       soundRef.current = null;
@@ -90,21 +108,54 @@ export default function UserScreen({ route, navigation }) {
     Speech.stop();
   };
 
-  const playAudio = async (url, name, onFinish = null) => {
-    await stopAll();
-    setNowPlaying(name);
-    try {
-      const { sound } = await Audio.Sound.createAsync({ uri: url }, { shouldPlay: true });
-      soundRef.current = sound;
-      sound.setOnPlaybackStatusUpdate(status => {
-        if (status.didJustFinish) {
-          setNowPlaying(null);
-          if (onFinish) onFinish();
+  const playAudio = (url, name, onFinish = null, delaySeconds = 0) => {
+    audioQueueRef.current.push({ url, name, onFinish, delaySeconds });
+    processQueue();
+  };
+
+  const processQueue = async () => {
+    if (isPlayingRef.current || audioQueueRef.current.length === 0) return;
+    
+    isPlayingRef.current = true;
+    const { url, name, onFinish, delaySeconds } = audioQueueRef.current.shift();
+    
+    const play = async () => {
+      setNowPlaying(name);
+      try {
+        const { sound } = await Audio.Sound.createAsync({ uri: url }, { shouldPlay: true });
+        soundRef.current = sound;
+        sound.setOnPlaybackStatusUpdate(async status => {
+          if (status.didJustFinish) {
+            try { await sound.unloadAsync(); } catch(e) {}
+            setNowPlaying(null);
+            isPlayingRef.current = false;
+            if (onFinish) onFinish();
+            processQueue();
+          }
+        });
+      } catch (err) {
+        console.warn('Audio play error:', err);
+        setNowPlaying(null);
+        isPlayingRef.current = false;
+        processQueue();
+      }
+    };
+
+    if (delaySeconds > 0) {
+      setVerificationState('delaying');
+      setDelayCountdown(delaySeconds);
+      let timeLeft = delaySeconds;
+      countdownIntervalRef.current = setInterval(() => {
+        timeLeft -= 1;
+        setDelayCountdown(timeLeft);
+        if (timeLeft <= 0) {
+          clearInterval(countdownIntervalRef.current);
+          setVerificationState('idle');
+          play();
         }
-      });
-    } catch (err) {
-      console.warn('Audio play error:', err);
-      setNowPlaying(null);
+      }, 1000);
+    } else {
+      play();
     }
   };
 
@@ -155,12 +206,13 @@ export default function UserScreen({ route, navigation }) {
       // Must match explicit current floor (coerce both to strings to prevent legacy data type mismatches)
       if (String(target.floor || 1) !== String(currentFloorRef.current)) return;
 
+      const targetRadius = target.triggerRadius ? Number(target.triggerRadius) : AUTO_PLAY_DISTANCE;
       const d = calculateDistance(lat, lng, target.lat, target.lng);
       let shouldTrigger = false;
-      if (d <= AUTO_PLAY_DISTANCE) shouldTrigger = true;
+      if (d <= targetRadius) shouldTrigger = true;
       else if (prevLocRef.current) {
         const prevDist = calculateDistance(prevLocRef.current.lat, prevLocRef.current.lng, target.lat, target.lng);
-        if (prevDist <= AUTO_PLAY_DISTANCE) shouldTrigger = true;
+        if (prevDist <= targetRadius) shouldTrigger = true;
       }
 
       if (!shouldTrigger) {
@@ -177,6 +229,7 @@ export default function UserScreen({ route, navigation }) {
       
       // Check if this GPS target contains any inside indoor exhibits
       const hasIndoorTour = exhibitsRef.current.some(e => e.parentGpsId === target.id);
+      const targetDirections = gpsDirectionsRef.current.filter(d => d.parentGpsId === target.id);
       
       playAudio(target.audioUrl, target.name, () => {
         if (hasIndoorTour) {
@@ -196,6 +249,10 @@ export default function UserScreen({ route, navigation }) {
             }
           });
         }
+      });
+      
+      targetDirections.forEach(dir => {
+        playAudio(dir.audioUrl, dir.name, null, Number(dir.delaySeconds) || 0);
       });
     });
   };
@@ -340,15 +397,25 @@ export default function UserScreen({ route, navigation }) {
   // ==============================
   
   const renderGpsItem = ({ item }) => {
+    const targetRadius = item.triggerRadius ? Number(item.triggerRadius) : AUTO_PLAY_DISTANCE;
     const dist = currentLoc ? calculateDistance(currentLoc.lat, currentLoc.lng, item.lat, item.lng) : null;
-    const isNear = dist !== null && dist <= AUTO_PLAY_DISTANCE;
+    const isNear = dist !== null && dist <= targetRadius;
+    
+    const handleManualPlay = () => {
+      const targetDirections = gpsDirectionsRef.current.filter(d => d.parentGpsId === item.id);
+      playAudio(item.audioUrl, item.name);
+      targetDirections.forEach(dir => {
+        playAudio(dir.audioUrl, dir.name, null, Number(dir.delaySeconds) || 0);
+      });
+    };
+
     return (
       <View style={[styles.card, isNear && { borderColor: '#10b981', borderWidth: 1 }]}>
         <View style={{ flex: 1 }}>
           <Text style={styles.targetName}>{item.name}</Text>
           {dist !== null && <Text style={{ color: isNear ? '#10b981' : '#94a3b8', fontSize: 13 }}>{dist < 1000 ? `${dist.toFixed(1)} m away` : `${(dist/1000).toFixed(2)} km away`}</Text>}
         </View>
-        <TouchableOpacity onPress={() => playAudio(item.audioUrl, item.name)} style={styles.playBtn}>
+        <TouchableOpacity onPress={handleManualPlay} style={styles.playBtn}>
           <Volume2 color="#fff" size={16} />
         </TouchableOpacity>
       </View>
