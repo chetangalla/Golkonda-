@@ -244,7 +244,7 @@ export default function UserScreen({ route, navigation }) {
       return String(a.id).localeCompare(String(b.id));
     });
 
-    sortedTargets.forEach(target => {
+    sortedTargets.forEach(async target => {
       // Must match explicit current floor (coerce both to strings to prevent legacy data type mismatches)
       if (String(target.floor || 1) !== String(currentFloorRef.current)) return;
 
