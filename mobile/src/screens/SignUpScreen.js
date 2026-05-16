@@ -25,27 +25,35 @@ export default function SignUpScreen({ navigation }) {
     }
   };
 
+  const content = (
+    <View style={styles.container}>
+      <Text style={styles.title}>Create Account</Text>
+      <Text style={styles.subtitle}>Join to continue your journey</Text>
+
+      <View style={styles.card}>
+        <TextInput style={styles.input} placeholder="Full Name" placeholderTextColor="#94a3b8" value={name} onChangeText={setName} />
+        <TextInput style={styles.input} placeholder="Email Address" placeholderTextColor="#94a3b8" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={setEmail} />
+        <TextInput style={styles.input} placeholder="Phone Number" placeholderTextColor="#94a3b8" keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
+        
+        <TouchableOpacity style={styles.btnPrimary} onPress={handleSignUp} disabled={loading}>
+          <Text style={styles.btnText}>{loading ? 'Registering...' : 'Sign Up'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      <TouchableOpacity style={{ marginTop: 24, alignItems: 'center' }} onPress={() => navigation.goBack()}>
+        <Text style={{ color: '#94a3b8', fontSize: 16 }}>Already have an account? <Text style={{ color: '#3b82f6', fontWeight: 'bold' }}>Login</Text></Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  if (Platform.OS === 'web') {
+    return content;
+  }
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.container}>
-          <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>Join to continue your journey</Text>
-
-          <View style={styles.card}>
-            <TextInput style={styles.input} placeholder="Full Name" placeholderTextColor="#94a3b8" value={name} onChangeText={setName} />
-            <TextInput style={styles.input} placeholder="Email Address" placeholderTextColor="#94a3b8" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={setEmail} />
-            <TextInput style={styles.input} placeholder="Phone Number" placeholderTextColor="#94a3b8" keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
-            
-            <TouchableOpacity style={styles.btnPrimary} onPress={handleSignUp} disabled={loading}>
-              <Text style={styles.btnText}>{loading ? 'Registering...' : 'Sign Up'}</Text>
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity style={{ marginTop: 24, alignItems: 'center' }} onPress={() => navigation.goBack()}>
-            <Text style={{ color: '#94a3b8', fontSize: 16 }}>Already have an account? <Text style={{ color: '#3b82f6', fontWeight: 'bold' }}>Login</Text></Text>
-          </TouchableOpacity>
-        </View>
+        {content}
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );

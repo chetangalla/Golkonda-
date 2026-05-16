@@ -119,6 +119,12 @@ export default function UserScreen({ route, navigation }) {
     isPlayingRef.current = true;
     const { url, name, onFinish, delaySeconds } = audioQueueRef.current.shift();
     
+    const finishItem = () => {
+       isPlayingRef.current = false;
+       if (onFinish) onFinish();
+       processQueue();
+    };
+
     const play = async () => {
       setNowPlaying(name);
       try {
@@ -128,35 +134,33 @@ export default function UserScreen({ route, navigation }) {
           if (status.didJustFinish) {
             try { await sound.unloadAsync(); } catch(e) {}
             setNowPlaying(null);
-            isPlayingRef.current = false;
-            if (onFinish) onFinish();
-            processQueue();
+            
+            if (delaySeconds > 0) {
+              setVerificationState('delaying');
+              setDelayCountdown(delaySeconds);
+              let timeLeft = delaySeconds;
+              countdownIntervalRef.current = setInterval(() => {
+                timeLeft -= 1;
+                setDelayCountdown(timeLeft);
+                if (timeLeft <= 0) {
+                  clearInterval(countdownIntervalRef.current);
+                  setVerificationState('idle');
+                  finishItem();
+                }
+              }, 1000);
+            } else {
+              finishItem();
+            }
           }
         });
       } catch (err) {
         console.warn('Audio play error:', err);
         setNowPlaying(null);
-        isPlayingRef.current = false;
-        processQueue();
+        finishItem();
       }
     };
 
-    if (delaySeconds > 0) {
-      setVerificationState('delaying');
-      setDelayCountdown(delaySeconds);
-      let timeLeft = delaySeconds;
-      countdownIntervalRef.current = setInterval(() => {
-        timeLeft -= 1;
-        setDelayCountdown(timeLeft);
-        if (timeLeft <= 0) {
-          clearInterval(countdownIntervalRef.current);
-          setVerificationState('idle');
-          play();
-        }
-      }, 1000);
-    } else {
-      play();
-    }
+    play();
   };
 
   // ==============================
@@ -425,8 +429,8 @@ export default function UserScreen({ route, navigation }) {
   const currentFloorExhibits = exhibits.filter(e => String(e.floor || 1) === String(currentFloor) && e.parentGpsId === activeGpsId);
   const nextExhibit = currentFloorExhibits[indoorIndex];
 
-  return (
-    <View style={styles.container}>
+  const renderSharedHeader = () => (
+    <>
       <View style={styles.header}>
         <Text style={styles.title}>Audio Tour</Text>
         <TouchableOpacity onPress={() => { stopAll(); setVerificationState('idle'); navigation.replace('Login'); }}>
@@ -478,99 +482,113 @@ export default function UserScreen({ route, navigation }) {
           )}
         </View>
       )}
+    </>
+  );
 
+  return (
+    <View style={styles.container}>
       {mode === 'gps' ? (
-        <>
-          <View style={styles.statusCard}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-              <Navigation color={currentLoc ? '#10b981' : '#94a3b8'} size={20} />
-              <Text style={styles.statusTitle}> GPS Status</Text>
-            </View>
-            <Text style={{ color: '#f8fafc' }}>{currentLoc ? `${currentLoc.lat.toFixed(5)}, ${currentLoc.lng.toFixed(5)}` : 'Searching for GPS...'}</Text>
-            
-            <View style={styles.floorRow}>
-              <Text style={{color: '#94a3b8'}}>I am on Floor:</Text>
-              <View style={{flexDirection: 'row', gap: 12, alignItems: 'center'}}>
-                 <TouchableOpacity onPress={() => handleFloorChange(-1)} style={styles.floorBtn}><Text style={{color: '#fff', fontWeight:'bold'}}>-</Text></TouchableOpacity>
-                 <Text style={{color: '#fff', fontSize: 18, fontWeight: 'bold', width: 24, textAlign: 'center'}}>{currentFloor}</Text>
-                 <TouchableOpacity onPress={() => handleFloorChange(1)} style={styles.floorBtn}><Text style={{color: '#fff', fontWeight:'bold'}}>+</Text></TouchableOpacity>
+        <FlatList
+          ListHeaderComponent={() => (
+            <>
+              {renderSharedHeader()}
+              <View style={styles.statusCard}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                  <Navigation color={currentLoc ? '#10b981' : '#94a3b8'} size={20} />
+                  <Text style={styles.statusTitle}> GPS Status</Text>
+                </View>
+                <Text style={{ color: '#f8fafc' }}>{currentLoc ? `${currentLoc.lat.toFixed(5)}, ${currentLoc.lng.toFixed(5)}` : 'Searching for GPS...'}</Text>
+                
+                <View style={styles.floorRow}>
+                  <Text style={{color: '#94a3b8'}}>I am on Floor:</Text>
+                  <View style={{flexDirection: 'row', gap: 12, alignItems: 'center'}}>
+                     <TouchableOpacity onPress={() => handleFloorChange(-1)} style={styles.floorBtn}><Text style={{color: '#fff', fontWeight:'bold'}}>-</Text></TouchableOpacity>
+                     <Text style={{color: '#fff', fontSize: 18, fontWeight: 'bold', width: 24, textAlign: 'center'}}>{currentFloor}</Text>
+                     <TouchableOpacity onPress={() => handleFloorChange(1)} style={styles.floorBtn}><Text style={{color: '#fff', fontWeight:'bold'}}>+</Text></TouchableOpacity>
+                  </View>
+                </View>
               </View>
-            </View>
-          </View>
-          <Text style={styles.subtitle}>Nearby Tour Spots</Text>
-          <FlatList
-            data={targets.filter(t => String(t.floor || 1) === String(currentFloorRef.current)).sort((a,b) => {
-              if(!currentLoc) return 0;
-              return calculateDistance(currentLoc.lat, currentLoc.lng, a.lat, a.lng) - calculateDistance(currentLoc.lat, currentLoc.lng, b.lat, b.lng);
-            })}
-            keyExtractor={item => item.id}
-            ListEmptyComponent={<Text style={{ color: '#94a3b8' }}>No targets available.</Text>}
-            renderItem={renderGpsItem}
-          />
-        </>
+              <Text style={styles.subtitle}>Nearby Tour Spots</Text>
+            </>
+          )}
+          data={targets.filter(t => String(t.floor || 1) === String(currentFloorRef.current)).sort((a,b) => {
+            if(!currentLoc) return 0;
+            return calculateDistance(currentLoc.lat, currentLoc.lng, a.lat, a.lng) - calculateDistance(currentLoc.lat, currentLoc.lng, b.lat, b.lng);
+          })}
+          keyExtractor={item => item.id}
+          ListEmptyComponent={<Text style={{ color: '#94a3b8' }}>No targets available.</Text>}
+          renderItem={renderGpsItem}
+        />
       ) : !activeGpsId ? (
-        <View style={styles.indoorCard}>
-            <Text style={{ color: '#f8fafc', fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>Select Your Building</Text>
-            <Text style={{ color: '#94a3b8', marginBottom: 16 }}>Which GPS Location are you inside of right now?</Text>
-            <FlatList
-              data={targets}
-              keyExtractor={item => item.id}
-              renderItem={({ item }) => (
-                <TouchableOpacity style={styles.card} onPress={() => { setActiveGpsId(item.id); setCurrentFloor(Number(item.floor || 1)); setIndoorIndex(0); }}>
-                  <Text style={styles.targetName}>{item.name}</Text>
-                  <ChevronRight color="#3b82f6" size={20} />
-                </TouchableOpacity>
-              )}
-              ListEmptyComponent={<Text style={{ color: '#ef4444' }}>No buildings available in this monument.</Text>}
-            />
-        </View>
-      ) : (
-        <>
-          <View style={styles.indoorCard}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <Text style={{ color: '#f8fafc', fontSize: 18, fontWeight: 'bold' }}>Floor {currentFloor} Guide</Text>
-              <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-                 <TouchableOpacity onPress={() => handleFloorChange(-1)} style={styles.floorBtn}><Text style={{color: '#fff', fontWeight:'bold'}}>-</Text></TouchableOpacity>
-                 <TouchableOpacity onPress={() => handleFloorChange(1)} style={styles.floorBtn}><Text style={{color: '#fff', fontWeight:'bold'}}>+</Text></TouchableOpacity>
+        <FlatList
+          ListHeaderComponent={() => (
+            <>
+              {renderSharedHeader()}
+              <View style={styles.indoorCard}>
+                <Text style={{ color: '#f8fafc', fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>Select Your Building</Text>
+                <Text style={{ color: '#94a3b8', marginBottom: 16 }}>Which GPS Location are you inside of right now?</Text>
               </View>
-            </View>
-
-            <View style={{padding: 16, backgroundColor: '#0f172a', borderRadius: 8, borderColor: nextExhibit?.nodeType === 'direction' ? '#8b5cf6' : '#3b82f6', borderWidth: 1, marginBottom: 16}}>
-              <Text style={{color: nextExhibit?.nodeType === 'direction' ? '#8b5cf6' : '#3b82f6', fontSize: 12, fontWeight: 'bold', marginBottom: 4}}>
-                {nextExhibit?.nodeType === 'direction' ? 'NEXT DIRECTION' : nextExhibit?.nodeType === 'floor_change' ? 'PROCEED TO FLOOR' : 'NEXT EXHIBIT'}
-              </Text>
-              {nextExhibit ? (
-                <>
-                  <Text style={{color: '#f8fafc', fontSize: 20, fontWeight: 'bold', marginBottom: 16}}>{nextExhibit.name}</Text>
-                  {verificationState === 'idle' ? (
-                    <TouchableOpacity style={styles.actionBtn} onPress={handlePlayNext}>
-                      <Play color="#fff" size={16} style={{marginRight: 8}}/>
-                      <Text style={{color: 'white', fontWeight: 'bold'}}>Play & Continue</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#475569' }]} onPress={manualConfirm}>
-                      <Text style={{color: 'white', fontWeight: 'bold'}}>Click here to confirm</Text>
-                    </TouchableOpacity>
-                  )}
-                </>
-              ) : (
-                <Text style={{color: '#10b981', fontSize: 18, fontWeight: 'bold'}}>Floor Complete!</Text>
-              )}
-            </View>
-            
-            <Text style={{ color: '#94a3b8', fontSize: 14, fontWeight: 'bold', marginBottom: 8 }}>Upcoming Itinerary</Text>
-            <TouchableOpacity onPress={() => setActiveGpsId(null)} style={{ marginTop: 12 }}>
-              <Text style={{ color: '#ef4444', textDecorationLine: 'underline' }}>Leave this building</Text>
+            </>
+          )}
+          data={targets}
+          keyExtractor={item => item.id}
+          renderItem={({ item }) => (
+            <TouchableOpacity style={styles.card} onPress={() => { setActiveGpsId(item.id); setCurrentFloor(Number(item.floor || 1)); setIndoorIndex(0); }}>
+              <Text style={styles.targetName}>{item.name}</Text>
+              <ChevronRight color="#3b82f6" size={20} />
             </TouchableOpacity>
-          </View>
-          
-          <FlatList
-            data={currentFloorExhibits}
-            keyExtractor={item => item.id}
-            renderItem={renderIndoorItem}
-            ListEmptyComponent={<Text style={{ color: '#ef4444', textAlign: 'center', marginTop: 20 }}>No guide data for Floor {currentFloor}.</Text>}
-          />
-        </>
+          )}
+          ListEmptyComponent={<Text style={{ color: '#ef4444' }}>No buildings available in this monument.</Text>}
+        />
+      ) : (
+        <FlatList
+          ListHeaderComponent={() => (
+            <>
+              {renderSharedHeader()}
+              <View style={styles.indoorCard}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <Text style={{ color: '#f8fafc', fontSize: 18, fontWeight: 'bold' }}>Floor {currentFloor} Guide</Text>
+                  <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+                     <TouchableOpacity onPress={() => handleFloorChange(-1)} style={styles.floorBtn}><Text style={{color: '#fff', fontWeight:'bold'}}>-</Text></TouchableOpacity>
+                     <TouchableOpacity onPress={() => handleFloorChange(1)} style={styles.floorBtn}><Text style={{color: '#fff', fontWeight:'bold'}}>+</Text></TouchableOpacity>
+                  </View>
+                </View>
+
+                <View style={{padding: 16, backgroundColor: '#0f172a', borderRadius: 8, borderColor: nextExhibit?.nodeType === 'direction' ? '#8b5cf6' : '#3b82f6', borderWidth: 1, marginBottom: 16}}>
+                  <Text style={{color: nextExhibit?.nodeType === 'direction' ? '#8b5cf6' : '#3b82f6', fontSize: 12, fontWeight: 'bold', marginBottom: 4}}>
+                    {nextExhibit?.nodeType === 'direction' ? 'NEXT DIRECTION' : nextExhibit?.nodeType === 'floor_change' ? 'PROCEED TO FLOOR' : 'NEXT EXHIBIT'}
+                  </Text>
+                  {nextExhibit ? (
+                    <>
+                      <Text style={{color: '#f8fafc', fontSize: 20, fontWeight: 'bold', marginBottom: 16}}>{nextExhibit.name}</Text>
+                      {verificationState === 'idle' ? (
+                        <TouchableOpacity style={styles.actionBtn} onPress={handlePlayNext}>
+                          <Play color="#fff" size={16} style={{marginRight: 8}}/>
+                          <Text style={{color: 'white', fontWeight: 'bold'}}>Play & Continue</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#475569' }]} onPress={manualConfirm}>
+                          <Text style={{color: 'white', fontWeight: 'bold'}}>Click here to confirm</Text>
+                        </TouchableOpacity>
+                      )}
+                    </>
+                  ) : (
+                    <Text style={{color: '#10b981', fontSize: 18, fontWeight: 'bold'}}>Floor Complete!</Text>
+                  )}
+                </View>
+                
+                <Text style={{ color: '#94a3b8', fontSize: 14, fontWeight: 'bold', marginBottom: 8 }}>Upcoming Itinerary</Text>
+                <TouchableOpacity onPress={() => setActiveGpsId(null)} style={{ marginTop: 12, marginBottom: 12 }}>
+                  <Text style={{ color: '#ef4444', textDecorationLine: 'underline' }}>Leave this building</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+          data={currentFloorExhibits}
+          keyExtractor={item => item.id}
+          renderItem={renderIndoorItem}
+          ListEmptyComponent={<Text style={{ color: '#ef4444', textAlign: 'center', marginTop: 20 }}>No guide data for Floor {currentFloor}.</Text>}
+        />
       )}
     </View>
   );

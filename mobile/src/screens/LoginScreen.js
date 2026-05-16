@@ -31,33 +31,41 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
+  const content = (
+    <View style={styles.container}>
+      <Text style={styles.title}>Audio Explorer</Text>
+      <Text style={styles.subtitle}>Log in to continue your journey</Text>
+
+      <View style={styles.card}>
+        <TextInput 
+          style={styles.input} 
+          placeholder="Email Address" 
+          placeholderTextColor="#94a3b8" 
+          keyboardType="email-address" 
+          autoCapitalize="none" 
+          value={email} 
+          onChangeText={setEmail} 
+        />
+        
+        <TouchableOpacity style={styles.btnPrimary} onPress={handleLogin} disabled={loading}>
+          <Text style={styles.btnText}>{loading ? 'Authenticating...' : 'Login'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      <TouchableOpacity style={{ marginTop: 24, alignItems: 'center' }} onPress={() => navigation.navigate('SignUp')}>
+        <Text style={{ color: '#94a3b8', fontSize: 16 }}>Don't have an account? <Text style={{ color: '#10b981', fontWeight: 'bold' }}>Sign Up</Text></Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  if (Platform.OS === 'web') {
+    return content;
+  }
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.container}>
-          <Text style={styles.title}>Audio Explorer</Text>
-          <Text style={styles.subtitle}>Log in to continue your journey</Text>
-
-          <View style={styles.card}>
-            <TextInput 
-              style={styles.input} 
-              placeholder="Email Address" 
-              placeholderTextColor="#94a3b8" 
-              keyboardType="email-address" 
-              autoCapitalize="none" 
-              value={email} 
-              onChangeText={setEmail} 
-            />
-            
-            <TouchableOpacity style={styles.btnPrimary} onPress={handleLogin} disabled={loading}>
-              <Text style={styles.btnText}>{loading ? 'Authenticating...' : 'Login'}</Text>
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity style={{ marginTop: 24, alignItems: 'center' }} onPress={() => navigation.navigate('SignUp')}>
-            <Text style={{ color: '#94a3b8', fontSize: 16 }}>Don't have an account? <Text style={{ color: '#10b981', fontWeight: 'bold' }}>Sign Up</Text></Text>
-          </TouchableOpacity>
-        </View>
+        {content}
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );

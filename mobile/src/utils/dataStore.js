@@ -113,6 +113,24 @@ export async function addTarget(name, lat, lng, audioUri, floor = 1, parentMonum
   }
 }
 
+export async function updateTarget(id, updates) {
+  if (db) {
+    const docRef = doc(db, 'targets', id);
+    await updateDoc(docRef, updates);
+    return { id, ...updates };
+  } else {
+    const stored = await AsyncStorage.getItem(LOCAL_KEY);
+    let targets = stored ? JSON.parse(stored) : [];
+    const index = targets.findIndex(t => t.id === id);
+    if (index > -1) {
+      targets[index] = { ...targets[index], ...updates };
+      await AsyncStorage.setItem(LOCAL_KEY, JSON.stringify(targets));
+      return targets[index];
+    }
+    return null;
+  }
+}
+
 export async function deleteTarget(id) {
   if (db) {
     await deleteDoc(doc(db, 'targets', id));
