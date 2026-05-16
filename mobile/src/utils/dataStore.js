@@ -88,7 +88,7 @@ export async function getTargets() {
   }
 }
 
-export async function addTarget(name, lat, lng, audioUri, floor = 1, parentMonumentId = null, triggerRadius = 7) {
+export async function addTarget(name, lat, lng, audioUri, floor = 1, parentMonumentId = null, triggerRadius = 7, orderIndex = 0) {
   let audioUrl = audioUri;
 
   if (db && storage && audioUri) {
@@ -100,13 +100,13 @@ export async function addTarget(name, lat, lng, audioUri, floor = 1, parentMonum
       audioUrl = await getDownloadURL(fileRef);
     }
     
-    const newTarget = { name, lat, lng, audioUrl, floor, parentMonumentId, triggerRadius };
+    const newTarget = { name, lat, lng, audioUrl, floor, parentMonumentId, triggerRadius, orderIndex };
     const docRef = await addDoc(collection(db, 'targets'), newTarget);
     return { id: docRef.id, ...newTarget };
   } else {
     const stored = await AsyncStorage.getItem(LOCAL_KEY);
     const targets = stored ? JSON.parse(stored) : [];
-    const newTarget = { id: Date.now().toString(), name, lat, lng, audioUrl, floor, parentMonumentId, triggerRadius };
+    const newTarget = { id: Date.now().toString(), name, lat, lng, audioUrl, floor, parentMonumentId, triggerRadius, orderIndex };
     targets.push(newTarget);
     await AsyncStorage.setItem(LOCAL_KEY, JSON.stringify(targets));
     return newTarget;

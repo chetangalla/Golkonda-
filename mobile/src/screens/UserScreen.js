@@ -237,7 +237,12 @@ export default function UserScreen({ route, navigation }) {
 
   const checkProximity = (lat, lng, latestTargets) => {
     const now = Date.now();
-    const sortedTargets = [...latestTargets].sort((a,b) => String(a.id).localeCompare(String(b.id)));
+    const sortedTargets = [...latestTargets].sort((a,b) => {
+      const orderA = a.orderIndex || 0;
+      const orderB = b.orderIndex || 0;
+      if (orderA !== orderB) return orderA - orderB;
+      return String(a.id).localeCompare(String(b.id));
+    });
 
     sortedTargets.forEach(target => {
       // Must match explicit current floor (coerce both to strings to prevent legacy data type mismatches)

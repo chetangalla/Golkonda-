@@ -34,6 +34,7 @@ export default function MasterScreen({ navigation }) {
   const [verificationPrompt, setVerificationPrompt] = useState('');
   const [delaySeconds, setDelaySeconds] = useState('0');
   const [triggerRadius, setTriggerRadius] = useState('7');
+  const [targetOrder, setTargetOrder] = useState('0');
   const [recording, setRecording] = useState(null);
   const [audioUri, setAudioUri] = useState(null);
   const [audioName, setAudioName] = useState('');
@@ -47,6 +48,7 @@ export default function MasterScreen({ navigation }) {
     setName('');
     setAudioUri(null);
     setAudioName('');
+    setTargetOrder('0');
   }, [mode]);
 
   const requestPermissions = async () => {
@@ -128,11 +130,12 @@ export default function MasterScreen({ navigation }) {
         const newMon = await addMonument(name);
         setMonuments([...monuments, newMon]);
       } else if (mode === 'gps') {
+        const parsedOrder = parseInt(targetOrder, 10) || 0;
         if (editingId) {
-          const updated = await updateTarget(editingId, { name, triggerRadius: parseInt(triggerRadius, 10) || 7, audioUrl: audioUri, floor: parsedFloor, parentMonumentId: activeMonumentId });
+          const updated = await updateTarget(editingId, { name, triggerRadius: parseInt(triggerRadius, 10) || 7, audioUrl: audioUri, floor: parsedFloor, parentMonumentId: activeMonumentId, orderIndex: parsedOrder });
           setTargets(targets.map(t => t.id === editingId ? updated : t));
         } else {
-          const newTarget = await addTarget(name, locData.lat, locData.lng, audioUri, parsedFloor, activeMonumentId, parseInt(triggerRadius, 10) || 7);
+          const newTarget = await addTarget(name, locData.lat, locData.lng, audioUri, parsedFloor, activeMonumentId, parseInt(triggerRadius, 10) || 7, parsedOrder);
           setTargets([...targets, newTarget]);
         }
       } else if (mode === 'gps_direction') {
@@ -157,6 +160,7 @@ export default function MasterScreen({ navigation }) {
       setName('');
       setVerificationPrompt('');
       setDelaySeconds('0');
+      setTargetOrder('0');
       setAudioUri(null);
       setAudioName('');
       setEditingId(null);
@@ -192,6 +196,7 @@ export default function MasterScreen({ navigation }) {
       setTriggerRadius(String(item.triggerRadius || 7));
       setFloor(String(item.floor || 1));
       setActiveMonumentId(item.parentMonumentId);
+      setTargetOrder(String(item.orderIndex || 0));
     }
   };
 
@@ -200,6 +205,7 @@ export default function MasterScreen({ navigation }) {
     setName('');
     setAudioUri(null);
     setAudioName('');
+    setTargetOrder('0');
   };
 
   const playTestAudio = async (url) => {
@@ -311,7 +317,10 @@ export default function MasterScreen({ navigation }) {
         )}
 
         {mode === 'gps' && (
-          <TextInput style={styles.input} placeholder="Trigger Radius in Meters (e.g. 7)" placeholderTextColor="#94a3b8" keyboardType="numeric" value={triggerRadius} onChangeText={setTriggerRadius} />
+          <>
+            <TextInput style={styles.input} placeholder="Trigger Radius in Meters (e.g. 7)" placeholderTextColor="#94a3b8" keyboardType="numeric" value={triggerRadius} onChangeText={setTriggerRadius} />
+            <TextInput style={styles.input} placeholder="Sequence Order (e.g. 1)" placeholderTextColor="#94a3b8" keyboardType="numeric" value={targetOrder} onChangeText={setTargetOrder} />
+          </>
         )}
 
         {mode === 'gps' && !editingId && (
