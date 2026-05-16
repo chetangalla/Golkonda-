@@ -39,6 +39,7 @@ export default function UserScreen({ route, navigation }) {
   // Refs
   const lastPlayedRef = useRef({});
   const clearedRef    = useRef({});
+  const playedOnceRef = useRef({});
   const prevLocRef    = useRef(null);
   const soundRef      = useRef(null);
   
@@ -49,6 +50,7 @@ export default function UserScreen({ route, navigation }) {
   const countdownIntervalRef = useRef(null);
   const audioQueueRef = useRef([]);
   const isPlayingRef = useRef(false);
+  const currentAudioTypeRef = useRef(null);
   const directionTimeoutsRef = useRef([]);
   const gpsDirectionsRef = useRef([]);
   
@@ -99,6 +101,7 @@ export default function UserScreen({ route, navigation }) {
     directionTimeoutsRef.current = [];
     audioQueueRef.current = [];
     isPlayingRef.current = false;
+    currentAudioTypeRef.current = null;
     
     if (soundRef.current) {
       try { await soundRef.current.unloadAsync(); } catch (_) {}
@@ -108,8 +111,8 @@ export default function UserScreen({ route, navigation }) {
     Speech.stop();
   };
 
-  const playAudio = (url, name, onFinish = null, delaySeconds = 0) => {
-    audioQueueRef.current.push({ url, name, onFinish, delaySeconds });
+  const playAudio = (url, name, onFinish = null, delaySeconds = 0, type = 'general') => {
+    audioQueueRef.current.push({ url, name, onFinish, delaySeconds, type });
     processQueue();
   };
 
@@ -117,7 +120,8 @@ export default function UserScreen({ route, navigation }) {
     if (isPlayingRef.current || audioQueueRef.current.length === 0) return;
     
     isPlayingRef.current = true;
-    const { url, name, onFinish, delaySeconds } = audioQueueRef.current.shift();
+    const { url, name, onFinish, delaySeconds, type } = audioQueueRef.current.shift();
+    currentAudioTypeRef.current = type;
     
     const finishItem = () => {
        isPlayingRef.current = false;
@@ -248,23 +252,31 @@ export default function UserScreen({ route, navigation }) {
         if (prevDist <= targetRadius) shouldTrigger = true;
       }
 
-      if (!shouldTrigger) {
-        clearedRef.current[target.id] = true;
-        return;
+      if (!shouldTrigger) return;
+
+      if (playedOnceRef.current[target.id]) return;
+      playedOnceRef.current[target.id] = true;
+      
+      // Preempt any currently queued or playing directions because a new target took priority
+      audioQueueRef.current = audioQueueRef.current.filter(item => item.type !== 'direction');
+      if (currentAudioTypeRef.current === 'direction') {
+        if (countdownIntervalRef.current) {
+           clearInterval(countdownIntervalRef.current);
+           setVerificationState('idle');
+        }
+        if (soundRef.current) {
+           try { await soundRef.current.unloadAsync(); soundRef.current = null; } catch(e) {}
+        }
+        setNowPlaying(null);
+        isPlayingRef.current = false;
+        currentAudioTypeRef.current = null;
       }
-
-      const lastPlayed = lastPlayedRef.current[target.id] || 0;
-      if (now - lastPlayed < COOLDOWN_PERIOD) return;
-      if (lastPlayed > 0 && !clearedRef.current[target.id]) return;
-
-      lastPlayedRef.current[target.id] = now;
-      clearedRef.current[target.id] = false;
       
       // Check if this GPS target contains any inside indoor exhibits
       const hasIndoorTour = exhibitsRef.current.some(e => e.parentGpsId === target.id);
       const targetDirections = gpsDirectionsRef.current.filter(d => d.parentGpsId === target.id);
       
-      playAudio(null, 'Settle GPS...', null, 2);
+      playAudio(null, 'Settle GPS...', null, 2, 'target');
       
       playAudio(target.audioUrl, target.name, () => {
         if (hasIndoorTour) {
@@ -287,8 +299,8 @@ export default function UserScreen({ route, navigation }) {
       });
       
       targetDirections.forEach(dir => {
-        playAudio(null, 'Lagging...', null, 2);
-        playAudio(dir.audioUrl, dir.name, null, Number(dir.delaySeconds) || 0);
+        playAudio(null, 'Lagging...', null, 2, 'direction');
+        playAudio(dir.audioUrl, dir.name, null, Number(dir.delaySeconds) || 0, 'direction');
       });
     });
   };
