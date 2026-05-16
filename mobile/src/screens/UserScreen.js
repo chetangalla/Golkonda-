@@ -149,6 +149,13 @@ export default function UserScreen({ route, navigation }) {
       setNowPlaying(name);
       try {
         const { sound } = await Audio.Sound.createAsync({ uri: url }, { shouldPlay: true });
+        
+        // If stopAll was called while audio was loading, isPlayingRef will be false
+        if (!isPlayingRef.current) {
+           try { await sound.unloadAsync(); } catch(e) {}
+           return;
+        }
+        
         soundRef.current = sound;
         sound.setOnPlaybackStatusUpdate(async status => {
           if (status.didJustFinish) {
