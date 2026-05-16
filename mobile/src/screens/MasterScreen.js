@@ -49,6 +49,7 @@ export default function MasterScreen({ navigation }) {
     setAudioUri(null);
     setAudioName('');
     setTargetOrder('0');
+    setLocData(null);
   }, [mode]);
 
   const requestPermissions = async () => {
@@ -132,7 +133,7 @@ export default function MasterScreen({ navigation }) {
       } else if (mode === 'gps') {
         const parsedOrder = parseInt(targetOrder, 10) || 0;
         if (editingId) {
-          const updated = await updateTarget(editingId, { name, triggerRadius: parseInt(triggerRadius, 10) || 7, audioUrl: audioUri, floor: parsedFloor, parentMonumentId: activeMonumentId, orderIndex: parsedOrder });
+          const updated = await updateTarget(editingId, { name, triggerRadius: parseInt(triggerRadius, 10) || 7, audioUrl: audioUri, floor: parsedFloor, parentMonumentId: activeMonumentId, orderIndex: parsedOrder, lat: locData.lat, lng: locData.lng });
           setTargets(targets.map(t => t.id === editingId ? updated : t));
         } else {
           const newTarget = await addTarget(name, locData.lat, locData.lng, audioUri, parsedFloor, activeMonumentId, parseInt(triggerRadius, 10) || 7, parsedOrder);
@@ -164,6 +165,7 @@ export default function MasterScreen({ navigation }) {
       setAudioUri(null);
       setAudioName('');
       setEditingId(null);
+      setLocData(null);
     } catch (err) {
       Alert.alert('Error', 'Failed to save.');
     } finally {
@@ -197,6 +199,7 @@ export default function MasterScreen({ navigation }) {
       setFloor(String(item.floor || 1));
       setActiveMonumentId(item.parentMonumentId);
       setTargetOrder(String(item.orderIndex || 0));
+      setLocData({ lat: item.lat, lng: item.lng });
     }
   };
 
@@ -206,6 +209,7 @@ export default function MasterScreen({ navigation }) {
     setAudioUri(null);
     setAudioName('');
     setTargetOrder('0');
+    setLocData(null);
   };
 
   const playTestAudio = async (url) => {
@@ -323,7 +327,7 @@ export default function MasterScreen({ navigation }) {
           </>
         )}
 
-        {mode === 'gps' && !editingId && (
+        {mode === 'gps' && (
           <View style={styles.row}>
             <TouchableOpacity style={styles.actionBtn} onPress={fetchCurrentLocation}>
               <MapPin color="#fff" size={16} />
