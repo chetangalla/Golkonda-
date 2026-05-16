@@ -126,6 +126,26 @@ export default function UserScreen({ route, navigation }) {
     };
 
     const play = async () => {
+      if (!url) {
+        if (delaySeconds > 0) {
+          setVerificationState('delaying');
+          setDelayCountdown(delaySeconds);
+          let timeLeft = delaySeconds;
+          countdownIntervalRef.current = setInterval(() => {
+            timeLeft -= 1;
+            setDelayCountdown(timeLeft);
+            if (timeLeft <= 0) {
+              clearInterval(countdownIntervalRef.current);
+              setVerificationState('idle');
+              finishItem();
+            }
+          }, 1000);
+        } else {
+          finishItem();
+        }
+        return;
+      }
+
       setNowPlaying(name);
       try {
         const { sound } = await Audio.Sound.createAsync({ uri: url }, { shouldPlay: true });
@@ -206,7 +226,9 @@ export default function UserScreen({ route, navigation }) {
 
   const checkProximity = (lat, lng, latestTargets) => {
     const now = Date.now();
-    latestTargets.forEach(target => {
+    const sortedTargets = [...latestTargets].sort((a,b) => String(a.id).localeCompare(String(b.id)));
+
+    sortedTargets.forEach(target => {
       // Must match explicit current floor (coerce both to strings to prevent legacy data type mismatches)
       if (String(target.floor || 1) !== String(currentFloorRef.current)) return;
 
@@ -235,6 +257,8 @@ export default function UserScreen({ route, navigation }) {
       const hasIndoorTour = exhibitsRef.current.some(e => e.parentGpsId === target.id);
       const targetDirections = gpsDirectionsRef.current.filter(d => d.parentGpsId === target.id);
       
+      playAudio(null, 'Settle GPS...', null, 2);
+      
       playAudio(target.audioUrl, target.name, () => {
         if (hasIndoorTour) {
           setMode('indoor');
@@ -256,6 +280,7 @@ export default function UserScreen({ route, navigation }) {
       });
       
       targetDirections.forEach(dir => {
+        playAudio(null, 'Lagging...', null, 2);
         playAudio(dir.audioUrl, dir.name, null, Number(dir.delaySeconds) || 0);
       });
     });
