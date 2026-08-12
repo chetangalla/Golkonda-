@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, StyleSheet, Alert, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, StyleSheet, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { loginUser } from '../utils/dataStore';
+import { showAlert } from '../utils/alert';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
@@ -8,7 +9,7 @@ export default function LoginScreen({ navigation }) {
 
   const handleLogin = async () => {
     if (!email) {
-      Alert.alert('Missing Field', 'Please enter your email.');
+      showAlert('Missing Field', 'Please enter your email.');
       return;
     }
     
@@ -25,7 +26,7 @@ export default function LoginScreen({ navigation }) {
       await loginUser(email);
       navigation.replace('Home');
     } catch (err) {
-      Alert.alert('Login Failed', err.message);
+      showAlert('Login Failed', err.message);
     } finally {
       setLoading(false);
     }

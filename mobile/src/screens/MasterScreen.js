@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, TextInput, StyleSheet, FlatList, Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, StyleSheet, FlatList, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { Audio } from 'expo-av';
 import * as Location from 'expo-location';
 import * as DocumentPicker from 'expo-document-picker';
-import { MapPin, Mic, Square, Trash2, Volume2, Footprints, Upload, Edit3 } from 'lucide-react-native';
-import { getTargets, addTarget, updateTarget, deleteTarget, getExhibits, addExhibit, deleteExhibit, getMonuments, addMonument, deleteMonument, getGpsDirections, addGpsDirection, deleteGpsDirection } from '../utils/dataStore';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import { MapPin, Mic, Square, Trash2, Volume2, Footprints, Upload, Edit3, DownloadCloud, UploadCloud } from 'lucide-react-native';
+import { getTargets, addTarget, updateTarget, deleteTarget, getExhibits, addExhibit, deleteExhibit, getMonuments, addMonument, deleteMonument, getGpsDirections, addGpsDirection, updateGpsDirection, deleteGpsDirection, exportAllData, importAllData } from '../utils/dataStore';
+import { showAlert } from '../utils/alert';
 
 export default function MasterScreen({ navigation }) {
   const [mode, setMode] = useState('monument'); // 'monument' | 'gps' | 'indoor'
@@ -18,6 +21,8 @@ export default function MasterScreen({ navigation }) {
   const [targets, setTargets] = useState([]);
   const [fetchingLoc, setFetchingLoc] = useState(false);
   const [locData, setLocData] = useState(null);
+  const [latText, setLatText] = useState('');
+  const [lngText, setLngText] = useState('');
 
   // Indoor State
   const [exhibits, setExhibits] = useState([]);
@@ -50,6 +55,8 @@ export default function MasterScreen({ navigation }) {
     setAudioName('');
     setTargetOrder('0');
     setLocData(null);
+    setLatText('');
+    setLngText('');
   }, [mode]);
 
   const requestPermissions = async () => {
@@ -77,11 +84,27 @@ export default function MasterScreen({ navigation }) {
     try {
       const result = await DocumentPicker.getDocumentAsync({ type: 'audio/*' });
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setAudioUri(result.assets[0].uri);
-        setAudioName(result.assets[0].name || 'File Selected');
+        const asset = result.assets[0];
+        if (Platform.OS === 'web' && asset.file) {
+          // The web picker's own .uri is a blob: reference — valid only
+          // for this browser tab's lifetime, gone the moment the page
+          // reloads, and useless once written into a backup file or
+          // restored on another device. Reading it into a data: URI makes
+          // it a self-contained string that survives all of that.
+          const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(asset.file);
+          });
+          setAudioUri(dataUrl);
+        } else {
+          setAudioUri(asset.uri);
+        }
+        setAudioName(asset.name || 'File Selected');
       }
     } catch (err) {
-      Alert.alert('Error', 'Failed to pick audio file.');
+      showAlert('Error', 'Failed to pick audio file.');
     }
   };
 
@@ -91,7 +114,7 @@ export default function MasterScreen({ navigation }) {
       const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
       setRecording(recording);
     } catch (err) {
-      Alert.alert('Error', 'Failed to start recording.');
+      showAlert('Error', 'Failed to start recording.');
     }
   };
 
@@ -104,22 +127,54 @@ export default function MasterScreen({ navigation }) {
 
   const fetchCurrentLocation = async () => {
     setFetchingLoc(true);
-    let location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-    setLocData({ lat: location.coords.latitude, lng: location.coords.longitude });
-    setFetchingLoc(false);
+    try {
+      let location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      setLocData({ lat: location.coords.latitude, lng: location.coords.longitude });
+      setLatText(String(location.coords.latitude));
+      setLngText(String(location.coords.longitude));
+    } catch (err) {
+      showAlert('Location Error', err.message || 'Could not get device GPS. You can type coordinates manually instead.');
+    } finally {
+      setFetchingLoc(false);
+    }
+  };
+
+  // Manual coordinate entry — for adding waypoints from a laptop/desk using
+  // coordinates already looked up (e.g. off Google Maps), instead of only
+  // being able to capture GPS by standing at the spot with a phone.
+  const syncManualCoords = (latStr, lngStr) => {
+    const lat = parseFloat(latStr);
+    const lng = parseFloat(lngStr);
+    // Only treat it as a real position once both halves parse — a lone
+    // latitude with no longitude yet is not a coordinate.
+    setLocData(!isNaN(lat) && !isNaN(lng) ? { lat, lng } : null);
+  };
+
+  const handleLatChange = (text) => {
+    setLatText(text);
+    syncManualCoords(text, lngText);
+  };
+
+  const handleLngChange = (text) => {
+    setLngText(text);
+    syncManualCoords(latText, text);
   };
 
   const handleSave = async () => {
     if (!name) {
-      Alert.alert('Missing Info', 'Please set a name.');
+      showAlert('Missing Info', 'Please set a name.');
       return;
     }
-    if ((mode === 'gps' || mode === 'indoor') && !audioUri) {
-      Alert.alert('Missing Audio', 'Please record audio for this step.');
+    // Directions are often just a pacing/walking cue with nothing to
+    // narrate — GPS Directions never required audio, and indoor "Direct"
+    // steps shouldn't either. Exhibits and floor changes still do.
+    const needsAudio = mode === 'gps' || (mode === 'indoor' && nodeType !== 'direction');
+    if (needsAudio && !audioUri) {
+      showAlert('Missing Audio', 'Please record audio for this step.');
       return;
     }
     if (mode === 'gps' && !locData && !editingId) {
-      Alert.alert('Missing GPS', 'Please get the GPS position.');
+      showAlert('Missing GPS', 'Type in both latitude and longitude, or tap "Use This Device\'s GPS Instead".');
       return;
     }
 
@@ -142,15 +197,20 @@ export default function MasterScreen({ navigation }) {
       } else if (mode === 'gps_direction') {
         if (!parentGpsId) {
           setLoading(false);
-          Alert.alert('Missing Info', 'Please select a GPS target first.');
+          showAlert('Missing Info', 'Please select a GPS target first.');
           return;
         }
-        const newDir = await addGpsDirection(name, audioUri, parentGpsId, Number(delaySeconds) || 0);
-        setGpsDirections([...gpsDirections, newDir]);
+        if (editingId) {
+          const updated = await updateGpsDirection(editingId, { name, audioUrl: audioUri, parentGpsId, delaySeconds: Number(delaySeconds) || 0 });
+          setGpsDirections(gpsDirections.map(d => d.id === editingId ? updated : d));
+        } else {
+          const newDir = await addGpsDirection(name, audioUri, parentGpsId, Number(delaySeconds) || 0);
+          setGpsDirections([...gpsDirections, newDir]);
+        }
       } else {
         if (!parentGpsId) {
           setLoading(false);
-          Alert.alert('Missing Info', 'Please select a GPS target first. If there are none for this monument, create a GPS target first.');
+          showAlert('Missing Info', 'Please select a GPS target first. If there are none for this monument, create a GPS target first.');
           return;
         }
         const orderIndex = exhibits.length > 0 ? exhibits[exhibits.length - 1].orderIndex + 1 : 1;
@@ -166,8 +226,10 @@ export default function MasterScreen({ navigation }) {
       setAudioName('');
       setEditingId(null);
       setLocData(null);
+      setLatText('');
+      setLngText('');
     } catch (err) {
-      Alert.alert('Error', 'Failed to save.');
+      showAlert('Error', 'Failed to save.');
     } finally {
       setLoading(false);
     }
@@ -200,6 +262,11 @@ export default function MasterScreen({ navigation }) {
       setActiveMonumentId(item.parentMonumentId);
       setTargetOrder(String(item.orderIndex || 0));
       setLocData({ lat: item.lat, lng: item.lng });
+      setLatText(String(item.lat));
+      setLngText(String(item.lng));
+    } else if (mode === 'gps_direction') {
+      setParentGpsId(item.parentGpsId);
+      setDelaySeconds(String(item.delaySeconds || 0));
     }
   };
 
@@ -209,24 +276,131 @@ export default function MasterScreen({ navigation }) {
     setAudioUri(null);
     setAudioName('');
     setTargetOrder('0');
+    setDelaySeconds('0');
     setLocData(null);
+    setLatText('');
+    setLngText('');
   };
 
   const playTestAudio = async (url) => {
     try {
       await Audio.Sound.createAsync({ uri: url }, { shouldPlay: true });
     } catch (err) {
-      Alert.alert('Playback Error', 'Cannot play this audio file.');
+      showAlert('Playback Error', 'Cannot play this audio file.');
     }
   };
+
+  // Everything above is stored only on this device. These two let the admin
+  // get names/coordinates/tour structure out as a plain JSON file (save to
+  // Files, email it, drop it in a cloud drive) and load it back in on any
+  // device — so losing this device doesn't mean losing the tour data again.
+  // On phones, audio is a local file:// path and isn't portable, so it has
+  // to be re-attached per waypoint after a restore. On web, audio picked
+  // via Upload File is now stored as a self-contained data: URI (see
+  // pickAudio), so it genuinely does travel with the backup — recordings
+  // made via the Record button still don't, since expo-av's web recorder
+  // hands back a blob: reference the same way.
+  const handleBackupExport = async () => {
+    try {
+      const payload = await exportAllData();
+      const json = JSON.stringify(payload, null, 2);
+      const fileName = `golkonda-backup-${new Date().toISOString().slice(0, 10)}.json`;
+
+      if (Platform.OS === 'web') {
+        // expo-file-system and expo-sharing have no web implementation and
+        // throw there ("...is not available on web") — the browser's own
+        // download mechanism does the exact same job without either.
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        showAlert('Backup Saved', `Downloaded as ${fileName} — check your browser's Downloads folder.`);
+        return;
+      }
+
+      const fileUri = FileSystem.documentDirectory + fileName;
+      await FileSystem.writeAsStringAsync(fileUri, json);
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, { mimeType: 'application/json', dialogTitle: 'Save Golkonda backup' });
+      } else {
+        showAlert('Saved', `Backup written to ${fileUri}`);
+      }
+    } catch (err) {
+      showAlert('Backup Failed', err.message || 'Could not create backup file.');
+    }
+  };
+
+  const handleBackupImport = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: ['application/json', 'text/*', '*/*'] });
+      if (result.canceled || !result.assets || result.assets.length === 0) return;
+
+      const asset = result.assets[0];
+      // Same reasoning as pickAudio: expo-file-system can't read a web
+      // blob: URI, but the picker already hands us the real File on web.
+      const content = (Platform.OS === 'web' && asset.file)
+        ? await asset.file.text()
+        : await FileSystem.readAsStringAsync(asset.uri);
+      const parsed = JSON.parse(content);
+
+      showAlert(
+        'Restore Backup',
+        'Add this backup\'s waypoints to what\'s already on this phone (skipping duplicates), or replace everything currently stored here?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Merge', onPress: () => runImport(parsed, true) },
+          { text: 'Replace All', style: 'destructive', onPress: () => runImport(parsed, false) },
+        ]
+      );
+    } catch (err) {
+      showAlert('Restore Failed', err.message || 'Could not read that file as a backup.');
+    }
+  };
+
+  const runImport = async (parsed, merge) => {
+    try {
+      await importAllData(parsed, { merge });
+      await loadData();
+      showAlert('Restored', 'Backup loaded. Audio uploaded via "Upload File" on the web app travels with the backup — anything recorded, or uploaded from a phone, is still device-local and needs re-attaching per waypoint.');
+    } catch (err) {
+      showAlert('Restore Failed', err.message || 'Could not apply that backup.');
+    }
+  };
+
+  // Picker.Item's color prop only works safely on iOS/Android, where the
+  // wheel/popup is genuinely themed by native code. On web, the open
+  // dropdown list is rendered by the browser/OS itself, outside our dark
+  // theme, and it ignores our transparent background — so it falls back
+  // to its own (light) native popup background. Leaving text white there
+  // isn't enough: <option> inherits color from the <select> regardless,
+  // so it stays white either way unless each option's color is set
+  // explicitly, overriding that inheritance with something dark enough
+  // to read against a light popup.
+  const itemTextColor = Platform.OS === 'web' ? '#111827' : '#fff';
 
   const headerContent = (
     <>
       <View style={styles.header}>
         <Text style={styles.title}>Admin Panel</Text>
-        <TouchableOpacity onPress={() => navigation.replace('Login')}>
-          <Text style={{ color: '#ef4444' }}>Logout</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>
+          <TouchableOpacity onPress={handleBackupExport} style={{ alignItems: 'center' }}>
+            <DownloadCloud color="#3b82f6" size={20} />
+            <Text style={{ color: '#3b82f6', fontSize: 10, fontWeight: '600', marginTop: 2 }}>Backup</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleBackupImport} style={{ alignItems: 'center' }}>
+            <UploadCloud color="#8b5cf6" size={20} />
+            <Text style={{ color: '#8b5cf6', fontSize: 10, fontWeight: '600', marginTop: 2 }}>Restore</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.replace('Login')}>
+            <Text style={{ color: '#ef4444' }}>Logout</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.tabContainer}>
@@ -269,7 +443,7 @@ export default function MasterScreen({ navigation }) {
                 }}
               >
                 {monuments.map(m => (
-                  <Picker.Item key={m.id} label={m.name} value={m.id} color="#fff" />
+                  <Picker.Item key={m.id} label={m.name} value={m.id} color={itemTextColor} />
                 ))}
               </Picker>
             </View>
@@ -295,7 +469,7 @@ export default function MasterScreen({ navigation }) {
                 onValueChange={(itemValue) => setParentGpsId(itemValue)}
               >
                 {targets.filter(t => t.parentMonumentId === activeMonumentId).map(t => (
-                  <Picker.Item key={t.id} label={t.name} value={t.id} color="#fff" />
+                  <Picker.Item key={t.id} label={t.name} value={t.id} color={itemTextColor} />
                 ))}
               </Picker>
             </View>
@@ -317,7 +491,7 @@ export default function MasterScreen({ navigation }) {
         )}
 
         {(mode === 'indoor' || mode === 'gps_direction') && (
-          <TextInput style={styles.input} placeholder="Walking Delay Before Audio Plays (Seconds)" placeholderTextColor="#94a3b8" keyboardType="numeric" value={delaySeconds} onChangeText={setDelaySeconds} />
+          <TextInput style={styles.input} placeholder="Pause After Audio Plays, Before Next Step (Seconds)" placeholderTextColor="#94a3b8" keyboardType="numeric" value={delaySeconds} onChangeText={setDelaySeconds} />
         )}
 
         {mode === 'gps' && (
@@ -328,14 +502,21 @@ export default function MasterScreen({ navigation }) {
         )}
 
         {mode === 'gps' && (
-          <View style={styles.row}>
-            <TouchableOpacity style={styles.actionBtn} onPress={fetchCurrentLocation}>
-              <MapPin color="#fff" size={16} />
-              <Text style={styles.actionBtnText}>
-                {fetchingLoc ? "Getting..." : locData ? `GPS: ${locData.lat.toFixed(4)}, ${locData.lng.toFixed(4)}` : "Get Phone GPS"}
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <>
+            <Text style={{ color: '#94a3b8', fontSize: 12, marginBottom: 8, fontWeight: 'bold' }}>COORDINATES — type them in, or capture from the device:</Text>
+            <View style={styles.row}>
+              <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="Latitude (e.g. 17.383054)" placeholderTextColor="#94a3b8" keyboardType="numbers-and-punctuation" value={latText} onChangeText={handleLatChange} />
+              <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="Longitude (e.g. 78.401432)" placeholderTextColor="#94a3b8" keyboardType="numbers-and-punctuation" value={lngText} onChangeText={handleLngChange} />
+            </View>
+            <View style={styles.row}>
+              <TouchableOpacity style={styles.actionBtn} onPress={fetchCurrentLocation}>
+                <MapPin color="#fff" size={16} />
+                <Text style={styles.actionBtnText}>
+                  {fetchingLoc ? "Getting..." : "Use This Device's GPS Instead"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
         )}
 
         {mode !== 'monument' && (
@@ -363,14 +544,14 @@ export default function MasterScreen({ navigation }) {
     </>
   );
 
-  return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-      <View style={styles.container}>
-        <FlatList
-          ListHeaderComponent={headerContent}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          data={mode === 'monument' ? monuments : mode === 'gps' ? targets.filter(t=>t.parentMonumentId === activeMonumentId) : mode === 'gps_direction' ? gpsDirections.filter(d=>d.parentGpsId === parentGpsId) : exhibits.filter(e=>targets.find(t=>t.id === e.parentGpsId)?.parentMonumentId === activeMonumentId)}
+  const mainContent = (
+    <View style={styles.container}>
+      <FlatList
+        style={{ flex: 1 }}
+        ListHeaderComponent={headerContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        data={mode === 'monument' ? monuments : mode === 'gps' ? targets.filter(t=>t.parentMonumentId === activeMonumentId) : mode === 'gps_direction' ? gpsDirections.filter(d=>d.parentGpsId === parentGpsId) : exhibits.filter(e=>targets.find(t=>t.id === e.parentGpsId)?.parentMonumentId === activeMonumentId)}
         keyExtractor={item => item.id}
         renderItem={({ item, index }) => (
           <View style={styles.targetCard}>
@@ -386,17 +567,30 @@ export default function MasterScreen({ navigation }) {
               {mode === 'gps' && <Text style={{ color: '#94a3b8', fontSize: 12 }}>{item.lat.toFixed(5)}, {item.lng.toFixed(5)} • Rad: {item.triggerRadius || 7}m</Text>}
               {mode === 'indoor' && item.nodeType === 'floor_change' && <Text style={{ color: '#10b981', fontSize: 12 }}>Sends to F{item.targetFloor}</Text>}
               {mode === 'indoor' && <Text style={{ color: '#64748b', fontSize: 12 }}>GPS Match: {targets.find(t => t.id === item.parentGpsId)?.name || 'Unknown'}</Text>}
-              {mode === 'gps_direction' && <Text style={{ color: '#10b981', fontSize: 12 }}>Plays after {item.delaySeconds || 0}s delay</Text>}
+              {mode === 'gps_direction' && <Text style={{ color: '#10b981', fontSize: 12 }}>Pauses {item.delaySeconds || 0}s after playing</Text>}
             </View>
             <View style={{ flexDirection: 'row', gap: 16 }}>
               {mode !== 'monument' && <TouchableOpacity onPress={() => playTestAudio(item.audioUrl)}><Volume2 color="#3b82f6" size={20} /></TouchableOpacity>}
-              {mode === 'gps' && <TouchableOpacity onPress={() => handleEdit(item)}><Edit3 color="#10b981" size={20} /></TouchableOpacity>}
+              {(mode === 'gps' || mode === 'gps_direction') && <TouchableOpacity onPress={() => handleEdit(item)}><Edit3 color="#10b981" size={20} /></TouchableOpacity>}
               <TouchableOpacity onPress={() => handleDelete(item.id)}><Trash2 color="#ef4444" size={20} /></TouchableOpacity>
             </View>
           </View>
         )}
       />
     </View>
+  );
+
+  // KeyboardAvoidingView is a mobile concern (software keyboard covering
+  // inputs) and its height-tracking logic actively fights the browser's own
+  // layout on web, which is what was breaking scrolling there — so web gets
+  // the plain content with an explicit viewport-height anchor instead.
+  if (Platform.OS === 'web') {
+    return mainContent;
+  }
+
+  return (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+      {mainContent}
     </KeyboardAvoidingView>
   );
 }

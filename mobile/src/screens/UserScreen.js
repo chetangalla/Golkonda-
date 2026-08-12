@@ -327,9 +327,13 @@ export default function UserScreen({ route, navigation }) {
   };
 
   const triggerPlayback = (exhibit) => {
+    // The pause belongs after the audio, not before it — same rule as GPS
+    // Directions. Passing it as playAudio's delaySeconds means it runs once
+    // this exhibit's own narration finishes, right before advancing.
+    const delay = Number(exhibit.delaySeconds || 0);
     playAudio(exhibit.audioUrl, exhibit.name, () => {
-       autoPlayNext(); // Auto play next item when audio finishes
-    });
+       autoPlayNext(); // Auto play next item once audio (and any post-audio delay) finishes
+    }, delay);
 
     if (exhibit.nodeType === 'floor_change') {
       const target = exhibit.targetFloor || currentFloorRef.current + 1;
@@ -352,26 +356,10 @@ export default function UserScreen({ route, navigation }) {
 
   const startExhibitFlow = (exhibit) => {
     if (!exhibit) return;
-    const delay = Number(exhibit.delaySeconds || 0);
-
-    if (delay > 0) {
-      setVerificationState('delaying');
-      setDelayCountdown(delay);
-      let timeLeft = delay;
-      countdownIntervalRef.current = setInterval(() => {
-        timeLeft -= 1;
-        setDelayCountdown(timeLeft);
-        if (timeLeft <= 0) {
-          clearInterval(countdownIntervalRef.current);
-          if (exhibit.verificationPrompt) {
-            startVerificationPrompt(exhibit);
-          } else {
-            setVerificationState('idle');
-            triggerPlayback(exhibit);
-          }
-        }
-      }, 1000);
-    } else if (exhibit.verificationPrompt) {
+    // Verification ("have you arrived?") still gates playback, since its
+    // whole purpose is confirming the visitor is in place before the audio
+    // starts. The numeric delay no longer does — see triggerPlayback.
+    if (exhibit.verificationPrompt) {
       startVerificationPrompt(exhibit);
     } else {
       triggerPlayback(exhibit);
@@ -514,11 +502,11 @@ export default function UserScreen({ route, navigation }) {
           <View style={styles.pulseDot} />
           <View style={{ flex: 1 }}>
             <Text style={{ color: '#8b5cf6', fontWeight: 'bold', fontSize: 13, marginBottom: 4 }}>
-              {verificationState === 'delaying' ? 'WALKING...' : verificationState === 'speaking' ? 'ASKING...' : 'LISTENING...'}
+              {verificationState === 'delaying' ? 'PAUSED...' : verificationState === 'speaking' ? 'ASKING...' : 'LISTENING...'}
             </Text>
             <Text style={{ color: '#f8fafc', fontSize: 16 }}>
-              {verificationState === 'delaying' ? `Audio activates in ${delayCountdown} seconds` : 
-               verificationState === 'speaking' ? `"${nextExhibit?.verificationPrompt}"` : 
+              {verificationState === 'delaying' ? `Continuing in ${delayCountdown} seconds` :
+               verificationState === 'speaking' ? `"${nextExhibit?.verificationPrompt}"` :
                'Say "Yes" to confirm location'}
             </Text>
           </View>
@@ -538,6 +526,7 @@ export default function UserScreen({ route, navigation }) {
     <View style={styles.container}>
       {mode === 'gps' ? (
         <FlatList
+          style={{ flex: 1 }}
           ListHeaderComponent={() => (
             <>
               {renderSharedHeader()}
@@ -570,6 +559,7 @@ export default function UserScreen({ route, navigation }) {
         />
       ) : !activeGpsId ? (
         <FlatList
+          style={{ flex: 1 }}
           ListHeaderComponent={() => (
             <>
               {renderSharedHeader()}
@@ -591,6 +581,7 @@ export default function UserScreen({ route, navigation }) {
         />
       ) : (
         <FlatList
+          style={{ flex: 1 }}
           ListHeaderComponent={() => (
             <>
               {renderSharedHeader()}

@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db, storage } from './firebase';
-import { collection, getDocs, addDoc, doc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const LOCAL_KEY = '@audio_targets';
@@ -180,6 +180,24 @@ export async function addGpsDirection(name, audioUri, parentGpsId, delaySeconds 
   }
 }
 
+export async function updateGpsDirection(id, updates) {
+  if (db) {
+    const docRef = doc(db, 'gps_directions', id);
+    await updateDoc(docRef, updates);
+    return { id, ...updates };
+  } else {
+    const stored = await AsyncStorage.getItem(GPS_DIRECTIONS_KEY);
+    let directions = stored ? JSON.parse(stored) : [];
+    const index = directions.findIndex(d => d.id === id);
+    if (index > -1) {
+      directions[index] = { ...directions[index], ...updates };
+      await AsyncStorage.setItem(GPS_DIRECTIONS_KEY, JSON.stringify(directions));
+      return directions[index];
+    }
+    return null;
+  }
+}
+
 export async function deleteGpsDirection(id) {
   if (db) {
     await deleteDoc(doc(db, 'gps_directions', id));
@@ -248,4 +266,52 @@ export async function deleteExhibit(id) {
     const filtered = exhibits.filter(e => e.id !== id);
     await AsyncStorage.setItem(INDOOR_KEY, JSON.stringify(filtered));
   }
+}
+
+// ===================== BACKUP / RESTORE =====================
+// Local storage lives only on this device — nothing here is synced anywhere.
+// These let the admin pull everything out as one portable file (save it to
+// Files, email it, drop it in a cloud drive) and load it back in on any
+// device. Note: audioUrl values are local file:// paths on THIS phone, so
+// they won't play back after restoring on a different device — re-attach
+// audio via "Update Item" after restoring. Coordinates, names, and the
+// tour structure all restore fully.
+const BACKUP_KEYS = {
+  monuments: MONUMENTS_KEY,
+  targets: LOCAL_KEY,
+  gpsDirections: GPS_DIRECTIONS_KEY,
+  exhibits: INDOOR_KEY,
+};
+
+export async function exportAllData() {
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    app: 'golkonda-audio-guide',
+    version: 1,
+    data: {},
+  };
+  for (const [label, key] of Object.entries(BACKUP_KEYS)) {
+    const stored = await AsyncStorage.getItem(key);
+    payload.data[label] = stored ? JSON.parse(stored) : [];
+  }
+  return payload;
+}
+
+export async function importAllData(payload, { merge = false } = {}) {
+  if (!payload || typeof payload !== 'object' || !payload.data) {
+    throw new Error('This file is not a recognized backup.');
+  }
+  for (const [label, key] of Object.entries(BACKUP_KEYS)) {
+    const incoming = Array.isArray(payload.data[label]) ? payload.data[label] : [];
+    if (!merge) {
+      await AsyncStorage.setItem(key, JSON.stringify(incoming));
+      continue;
+    }
+    const stored = await AsyncStorage.getItem(key);
+    const existing = stored ? JSON.parse(stored) : [];
+    const existingIds = new Set(existing.map(item => item.id));
+    const combined = [...existing, ...incoming.filter(item => !existingIds.has(item.id))];
+    await AsyncStorage.setItem(key, JSON.stringify(combined));
+  }
+  return true;
 }

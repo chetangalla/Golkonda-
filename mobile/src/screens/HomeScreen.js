@@ -36,6 +36,7 @@ export default function HomeScreen({ navigation }) {
         <ActivityIndicator size="large" color="#3b82f6" style={{ marginTop: 40 }} />
       ) : (
         <FlatList
+          style={{ flex: 1 }}
           data={monuments}
           keyExtractor={item => item.id}
           contentContainerStyle={{ paddingBottom: 40 }}

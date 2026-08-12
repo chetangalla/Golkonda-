@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, StyleSheet, Alert, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, StyleSheet, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { registerUser } from '../utils/dataStore';
+import { showAlert } from '../utils/alert';
 
 export default function SignUpScreen({ navigation }) {
   const [name, setName] = useState('');
@@ -10,16 +11,16 @@ export default function SignUpScreen({ navigation }) {
 
   const handleSignUp = async () => {
     if (!name || !email) {
-      Alert.alert('Missing Fields', 'Name and Email are required.');
+      showAlert('Missing Fields', 'Name and Email are required.');
       return;
     }
     setLoading(true);
     try {
       await registerUser(name, email, phone);
-      Alert.alert('Success', 'Account created successfully! Please login.');
+      showAlert('Success', 'Account created successfully! Please login.');
       navigation.replace('Login');
     } catch (err) {
-      Alert.alert('Failed', err.message);
+      showAlert('Failed', err.message);
     } finally {
       setLoading(false);
     }
