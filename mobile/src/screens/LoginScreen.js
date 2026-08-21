@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { loginUser } from '../utils/dataStore';
 import { showAlert } from '../utils/alert';
+import { colors, radius, shadow } from '../theme';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
@@ -12,12 +13,20 @@ export default function LoginScreen({ navigation }) {
       showAlert('Missing Field', 'Please enter your email.');
       return;
     }
-    
+
     Keyboard.dismiss();
-    
+    const normalized = email.toLowerCase();
+
     // Hardcoded Master Admin Login
-    if (email.toLowerCase() === 'admin@tourist.com') {
+    if (normalized === 'admin@tourist.com') {
       navigation.replace('Master');
+      return;
+    }
+
+    // Hardcoded listen-only login — same idea as the admin shortcut above,
+    // but routes straight to the visitor tour with no edit access at all.
+    if (normalized === 'user@tourist.com') {
+      navigation.replace('Home');
       return;
     }
 
@@ -34,27 +43,28 @@ export default function LoginScreen({ navigation }) {
 
   const content = (
     <View style={styles.container}>
+      <Text style={styles.eyebrow}>GOLKONDA FORT</Text>
       <Text style={styles.title}>Audio Explorer</Text>
       <Text style={styles.subtitle}>Log in to continue your journey</Text>
 
       <View style={styles.card}>
-        <TextInput 
-          style={styles.input} 
-          placeholder="Email Address" 
-          placeholderTextColor="#94a3b8" 
-          keyboardType="email-address" 
-          autoCapitalize="none" 
-          value={email} 
-          onChangeText={setEmail} 
+        <TextInput
+          style={styles.input}
+          placeholder="Email Address"
+          placeholderTextColor={colors.inkFaint}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          value={email}
+          onChangeText={setEmail}
         />
-        
+
         <TouchableOpacity style={styles.btnPrimary} onPress={handleLogin} disabled={loading}>
           <Text style={styles.btnText}>{loading ? 'Authenticating...' : 'Login'}</Text>
         </TouchableOpacity>
       </View>
 
       <TouchableOpacity style={{ marginTop: 24, alignItems: 'center' }} onPress={() => navigation.navigate('SignUp')}>
-        <Text style={{ color: '#94a3b8', fontSize: 16 }}>Don't have an account? <Text style={{ color: '#10b981', fontWeight: 'bold' }}>Sign Up</Text></Text>
+        <Text style={{ color: colors.inkMuted, fontSize: 16 }}>Don't have an account? <Text style={{ color: colors.accent, fontWeight: 'bold' }}>Sign Up</Text></Text>
       </TouchableOpacity>
     </View>
   );
@@ -73,11 +83,12 @@ export default function LoginScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a', padding: 24, justifyContent: 'center' },
-  title: { fontSize: 36, fontWeight: '800', color: '#f8fafc', textAlign: 'center', marginBottom: 8, letterSpacing: 0.5 },
-  subtitle: { fontSize: 16, color: '#94a3b8', textAlign: 'center', marginBottom: 40 },
-  card: { backgroundColor: 'rgba(30, 41, 59, 0.7)', padding: 24, borderRadius: 24, borderWidth: 1, borderColor: 'rgba(51, 65, 85, 0.8)', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 10 },
-  input: { backgroundColor: 'rgba(15, 23, 42, 0.6)', borderWidth: 1, borderColor: '#334155', color: '#f8fafc', padding: 16, borderRadius: 12, marginBottom: 16, fontSize: 16 },
-  btnPrimary: { backgroundColor: '#10b981', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 },
-  btnText: { color: '#fff', fontWeight: 'bold', fontSize: 18, letterSpacing: 0.5 }
+  container: { flex: 1, backgroundColor: colors.bg, padding: 24, justifyContent: 'center' },
+  eyebrow: { fontSize: 12, fontWeight: '700', color: colors.accent, textAlign: 'center', letterSpacing: 3, marginBottom: 10 },
+  title: { fontSize: 36, fontWeight: '800', color: colors.ink, textAlign: 'center', marginBottom: 8, letterSpacing: 0.5 },
+  subtitle: { fontSize: 16, color: colors.inkMuted, textAlign: 'center', marginBottom: 40 },
+  card: { backgroundColor: colors.card, padding: 24, borderRadius: radius.xxl, borderWidth: 1, borderColor: colors.border, ...shadow('#000', 0.35) },
+  input: { backgroundColor: colors.bgSoft, borderWidth: 1, borderColor: colors.border, color: colors.ink, padding: 16, borderRadius: radius.md, marginBottom: 16, fontSize: 16 },
+  btnPrimary: { backgroundColor: colors.accent, padding: 16, borderRadius: radius.md, alignItems: 'center', marginTop: 8, ...shadow(colors.accent, 0.35) },
+  btnText: { color: colors.accentInk, fontWeight: 'bold', fontSize: 18, letterSpacing: 0.5 }
 });
