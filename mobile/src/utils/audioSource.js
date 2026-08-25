@@ -19,11 +19,18 @@ export async function resolvePlayableUri(uri) {
 
   if (tempFileCache[uri]) return tempFileCache[uri];
 
-  const match = uri.match(/^data:(audio\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
-  if (!match) return uri; // Unrecognized data URI shape — let it fail naturally rather than guess.
+  // Deliberately not requiring the mime type to start with "audio/" —
+  // browsers don't reliably report a clean audio/* type for every
+  // recording (an uncommon codec or extension can come through as
+  // something like application/octet-stream). We already know this is
+  // meant to be audio because of where it's being played from; we just
+  // need *a* base64 payload and *some* reasonable file extension.
+  const match = uri.match(/^data:([^;,]*);base64,([\s\S]*)$/);
+  if (!match) return uri; // Not a base64 data URI at all — let it fail naturally rather than guess.
 
   const [, mime, base64] = match;
-  const ext = (mime.split('/')[1] || 'm4a').split('+')[0];
+  const rawExt = (mime.split('/')[1] || '').split('+')[0].split(';')[0].trim();
+  const ext = /^[a-zA-Z0-9]{1,10}$/.test(rawExt) ? rawExt : 'm4a';
   const path = `${FileSystem.cacheDirectory}audio-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
   await FileSystem.writeAsStringAsync(path, base64, { encoding: FileSystem.EncodingType.Base64 });
 
