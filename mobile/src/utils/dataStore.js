@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db, storage, auth } from './firebase';
-import { collection, getDocs, addDoc, doc, deleteDoc, updateDoc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, doc, deleteDoc, updateDoc, getDoc, setDoc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 
@@ -394,4 +394,130 @@ export async function importAllData(payload, { merge = false } = {}) {
     }
   }
   return true;
+}
+
+// ===================== ACCESS CODES =====================
+// Cash-only, time-limited access: the admin generates a code for a visitor
+// who's paid in person, the visitor redeems it once inside the app, and
+// their account gets `durationHours` of tour access starting at that
+// moment. No payment happens anywhere in this code — that's the point.
+//
+// Known limitation, worth being upfront about: this is enforced by
+// Firestore's security rules, not a server function, because a server
+// function would mean standing up Cloud Functions (a real separate piece
+// of infrastructure) for a pilot feature. The rules prevent the casual
+// bypasses — generating your own code, reusing someone else's, reading
+// other visitors' data — but a technically determined user could still
+// write a fake accessExpiresAt to their own profile directly, bypassing a
+// code entirely. Fine for testing at the fort; worth moving the expiry
+// write into a Cloud Function before this becomes the permanent model.
+const ACCESS_CODES_KEY = '@access_codes'; // local fallback only
+
+function generateCodeString() {
+  // Excludes visually ambiguous characters (0/O, 1/I/L) since these get
+  // read aloud or handwritten during an in-person cash handoff.
+  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return code;
+}
+
+export async function generateAccessCode(durationHours) {
+  const hours = Number(durationHours) || 6;
+
+  if (db) {
+    // Collision odds at 6 chars from a 32-letter alphabet are astronomically
+    // low, but this is a code someone will hand over cash for — check anyway.
+    let code = generateCodeString();
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const existing = await getDoc(doc(db, 'accessCodes', code));
+      if (!existing.exists()) break;
+      code = generateCodeString();
+    }
+    await setDoc(doc(db, 'accessCodes', code), {
+      durationHours: hours,
+      createdAt: serverTimestamp(),
+      used: false,
+      redeemedBy: null,
+      redeemedAt: null,
+    });
+    return code;
+  } else {
+    const stored = await AsyncStorage.getItem(ACCESS_CODES_KEY);
+    const codes = stored ? JSON.parse(stored) : [];
+    const code = generateCodeString();
+    codes.push({ id: code, durationHours: hours, createdAt: new Date().toISOString(), used: false, redeemedBy: null, redeemedAt: null });
+    await AsyncStorage.setItem(ACCESS_CODES_KEY, JSON.stringify(codes));
+    return code;
+  }
+}
+
+export async function getAccessCodes() {
+  if (db) {
+    const snap = await getDocs(collection(db, 'accessCodes'));
+    const codes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return codes.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+  } else {
+    const stored = await AsyncStorage.getItem(ACCESS_CODES_KEY);
+    const codes = stored ? JSON.parse(stored) : [];
+    return codes.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }
+}
+
+export async function deleteAccessCode(code) {
+  if (db) {
+    await deleteDoc(doc(db, 'accessCodes', code));
+  } else {
+    const stored = await AsyncStorage.getItem(ACCESS_CODES_KEY);
+    const codes = stored ? JSON.parse(stored) : [];
+    await AsyncStorage.setItem(ACCESS_CODES_KEY, JSON.stringify(codes.filter(c => c.id !== code)));
+  }
+}
+
+// Visitor side: redeem a code to unlock `durationHours` of access starting
+// now. Runs as a transaction so two people reading the same physical code
+// at the same moment can't both successfully redeem it.
+export async function redeemAccessCode(rawCode) {
+  const code = (rawCode || '').trim().toUpperCase();
+  if (!code) throw new Error('Enter the code you were given.');
+
+  if (!db || !auth?.currentUser) {
+    throw new Error('Access codes need a live connection — no backend is configured right now.');
+  }
+
+  const uid = auth.currentUser.uid;
+  const codeRef = doc(db, 'accessCodes', code);
+  const userRef = doc(db, 'users', uid);
+
+  const expiresAt = await runTransaction(db, async (tx) => {
+    const codeSnap = await tx.get(codeRef);
+    if (!codeSnap.exists()) throw new Error('That code was not found — double check it and try again.');
+    const data = codeSnap.data();
+    if (data.used) throw new Error('That code has already been used.');
+
+    const durationHours = Number(data.durationHours) || 6;
+    const expires = new Date(Date.now() + durationHours * 60 * 60 * 1000);
+
+    tx.update(codeRef, { used: true, redeemedBy: uid, redeemedAt: serverTimestamp() });
+    tx.set(userRef, { accessExpiresAt: expires.toISOString() }, { merge: true });
+    return expires;
+  });
+
+  return expiresAt;
+}
+
+// Local/dev fallback (no Firebase configured) skips gating entirely — there
+// is nowhere to check a real access window against, so every visitor is
+// treated as having access, same as before this feature existed.
+export async function getUserAccess(uid) {
+  if (!db) return { hasAccess: true, expiresAt: null };
+  if (!uid) return { hasAccess: false, expiresAt: null };
+
+  const snap = await getDoc(doc(db, 'users', uid));
+  if (!snap.exists() || !snap.data().accessExpiresAt) return { hasAccess: false, expiresAt: null };
+
+  const expiresAt = new Date(snap.data().accessExpiresAt);
+  return { hasAccess: expiresAt.getTime() > Date.now(), expiresAt };
 }

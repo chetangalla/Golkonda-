@@ -6,8 +6,8 @@ import * as Location from 'expo-location';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { MapPin, Mic, Square, Trash2, Volume2, Footprints, Upload, Edit3, DownloadCloud, UploadCloud } from 'lucide-react-native';
-import { getTargets, addTarget, updateTarget, deleteTarget, getExhibits, addExhibit, deleteExhibit, getMonuments, addMonument, deleteMonument, getGpsDirections, addGpsDirection, updateGpsDirection, deleteGpsDirection, exportAllData, importAllData } from '../utils/dataStore';
+import { MapPin, Mic, Square, Trash2, Volume2, Footprints, Upload, Edit3, DownloadCloud, UploadCloud, KeyRound } from 'lucide-react-native';
+import { getTargets, addTarget, updateTarget, deleteTarget, getExhibits, addExhibit, deleteExhibit, getMonuments, addMonument, deleteMonument, getGpsDirections, addGpsDirection, updateGpsDirection, deleteGpsDirection, exportAllData, importAllData, generateAccessCode, getAccessCodes, deleteAccessCode } from '../utils/dataStore';
 import { showAlert } from '../utils/alert';
 import { resolvePlayableUri } from '../utils/audioSource';
 
@@ -30,6 +30,12 @@ export default function MasterScreen({ navigation }) {
 
   // GPS Directions State
   const [gpsDirections, setGpsDirections] = useState([]);
+
+  // Access Codes State — cash-based, time-limited access (see dataStore).
+  const [accessCodes, setAccessCodes] = useState([]);
+  const [codeDuration, setCodeDuration] = useState('6');
+  const [generatingCode, setGeneratingCode] = useState(false);
+  const [lastGeneratedCode, setLastGeneratedCode] = useState(null);
 
   // Shared Form State
   const [name, setName] = useState('');
@@ -79,6 +85,29 @@ export default function MasterScreen({ navigation }) {
 
     const dirData = await getGpsDirections();
     setGpsDirections(dirData);
+
+    const codesData = await getAccessCodes();
+    setAccessCodes(codesData);
+  };
+
+  const handleGenerateCode = async () => {
+    setGeneratingCode(true);
+    try {
+      const code = await generateAccessCode(codeDuration);
+      setLastGeneratedCode(code);
+      const codesData = await getAccessCodes();
+      setAccessCodes(codesData);
+    } catch (err) {
+      showAlert('Error', 'Failed to generate a code.');
+    } finally {
+      setGeneratingCode(false);
+    }
+  };
+
+  const handleDeleteCode = async (code) => {
+    await deleteAccessCode(code);
+    setAccessCodes(accessCodes.filter(c => c.id !== code));
+    if (lastGeneratedCode === code) setLastGeneratedCode(null);
   };
 
   const pickAudio = async () => {
@@ -418,8 +447,12 @@ export default function MasterScreen({ navigation }) {
         <TouchableOpacity style={[styles.tab, mode === 'indoor' && styles.activeTab]} onPress={() => setMode('indoor')}>
           <Text style={styles.tabText}>Indoor Tour</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={[styles.tab, mode === 'access_codes' && styles.activeTab]} onPress={() => setMode('access_codes')}>
+          <Text style={styles.tabText}>Codes</Text>
+        </TouchableOpacity>
       </View>
 
+      {mode !== 'access_codes' && (
       <View style={styles.formCard}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <Text style={styles.subtitle}>{editingId ? 'Edit Item' : mode === 'monument' ? 'New Monument' : mode === 'gps' ? 'New GPS Target' : mode === 'gps_direction' ? 'New Walking Direction' : 'New Indoor Step'}</Text>
@@ -541,8 +574,28 @@ export default function MasterScreen({ navigation }) {
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>{editingId ? "Update Item" : "Save Item"}</Text>}
         </TouchableOpacity>
       </View>
+      )}
 
-      <Text style={[styles.subtitle, { marginBottom: 12 }]}>{mode === 'monument' ? 'Saved Monuments' : mode === 'gps' ? 'Database Targets' : mode === 'gps_direction' ? 'GPS Directions' : 'Indoor Tour Sequence'}</Text>
+      {mode === 'access_codes' && (
+        <View style={styles.formCard}>
+          <Text style={styles.subtitle}>Generate Access Code</Text>
+          <Text style={{ color: '#94a3b8', fontSize: 13, marginBottom: 16 }}>
+            Give this code to a visitor who's paid in person. It grants that many hours of tour access from the moment they enter it in the app — no payment happens anywhere in the app itself.
+          </Text>
+          <TextInput style={styles.input} placeholder="Duration in Hours (e.g. 6)" placeholderTextColor="#94a3b8" keyboardType="numeric" value={codeDuration} onChangeText={setCodeDuration} />
+          <TouchableOpacity style={styles.btnPrimary} onPress={handleGenerateCode} disabled={generatingCode}>
+            {generatingCode ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Generate New Code</Text>}
+          </TouchableOpacity>
+          {lastGeneratedCode && (
+            <View style={styles.codeReveal}>
+              <Text style={{ color: '#94a3b8', fontSize: 12, fontWeight: 'bold', marginBottom: 6 }}>NEW CODE — GIVE THIS TO THE VISITOR</Text>
+              <Text style={styles.codeRevealText}>{lastGeneratedCode}</Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      <Text style={[styles.subtitle, { marginBottom: 12 }]}>{mode === 'monument' ? 'Saved Monuments' : mode === 'gps' ? 'Database Targets' : mode === 'gps_direction' ? 'GPS Directions' : mode === 'access_codes' ? 'Generated Codes' : 'Indoor Tour Sequence'}</Text>
     </>
   );
 
@@ -553,9 +606,22 @@ export default function MasterScreen({ navigation }) {
         ListHeaderComponent={headerContent}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        data={mode === 'monument' ? monuments : mode === 'gps' ? targets.filter(t=>t.parentMonumentId === activeMonumentId) : mode === 'gps_direction' ? gpsDirections.filter(d=>d.parentGpsId === parentGpsId) : exhibits.filter(e=>targets.find(t=>t.id === e.parentGpsId)?.parentMonumentId === activeMonumentId)}
+        data={mode === 'monument' ? monuments : mode === 'gps' ? targets.filter(t=>t.parentMonumentId === activeMonumentId) : mode === 'gps_direction' ? gpsDirections.filter(d=>d.parentGpsId === parentGpsId) : mode === 'access_codes' ? accessCodes : exhibits.filter(e=>targets.find(t=>t.id === e.parentGpsId)?.parentMonumentId === activeMonumentId)}
         keyExtractor={item => item.id}
-        renderItem={({ item, index }) => (
+        renderItem={({ item, index }) => mode === 'access_codes' ? (
+          <View style={styles.targetCard}>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <KeyRound color={item.used ? '#64748b' : '#10b981'} size={16} />
+                <Text style={[styles.targetName, { letterSpacing: 2 }]}>{item.id}</Text>
+              </View>
+              <Text style={{ color: item.used ? '#94a3b8' : '#10b981', fontSize: 12, marginTop: 4 }}>
+                {item.used ? `Redeemed • ${item.durationHours}h grant` : `Unused • grants ${item.durationHours}h`}
+              </Text>
+            </View>
+            {!item.used && <TouchableOpacity onPress={() => handleDeleteCode(item.id)}><Trash2 color="#ef4444" size={20} /></TouchableOpacity>}
+          </View>
+        ) : (
           <View style={styles.targetCard}>
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -621,5 +687,7 @@ const styles = StyleSheet.create({
   activeTypeBtn: { backgroundColor: '#8b5cf6' },
   typeBtnText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
   pickerContainer: { backgroundColor: '#0f172a', borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: '#334155' },
-  picker: { color: '#fff', backgroundColor: 'transparent' }
+  picker: { color: '#fff', backgroundColor: 'transparent' },
+  codeReveal: { backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#10b981', borderRadius: 8, padding: 16, marginTop: 16, alignItems: 'center' },
+  codeRevealText: { color: '#10b981', fontSize: 28, fontWeight: 'bold', letterSpacing: 6 }
 });

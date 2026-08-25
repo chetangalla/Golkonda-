@@ -1,13 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView, TextInput, ActivityIndicator } from 'react-native';
 import * as Location from 'expo-location';
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
 import { MapPin, Navigation, Volume2, Music, Footprints, Play, ChevronRight, CornerUpRight, ArrowUpCircle, Mic } from 'lucide-react-native';
-import { getTargets, getExhibits, getGpsDirections, logout } from '../utils/dataStore';
+import { getTargets, getExhibits, getGpsDirections, logout, getUserAccess, redeemAccessCode } from '../utils/dataStore';
 import { calculateDistance } from '../utils/geo';
 import { resolvePlayableUri } from '../utils/audioSource';
+import { auth } from '../utils/firebase';
+import { showAlert } from '../utils/alert';
 import { colors, radius, shadow } from '../theme';
+
+// Access is rechecked on this interval so a session that spans past the
+// redeemed window gets returned to the code-entry screen — 6 hours is long
+// enough that per-minute precision doesn't matter, just that it happens
+// automatically without the visitor needing to back out and back in.
+const ACCESS_RECHECK_INTERVAL = 60000;
 
 const AUTO_PLAY_DISTANCE = 7;
 const COOLDOWN_PERIOD    = 60000;
@@ -17,6 +25,14 @@ const WALKING_DURATION   = 5000; // 5 seconds of walking
 export default function UserScreen({ route, navigation }) {
   const { monumentId } = route.params || {};
   const [mode, setMode] = useState('gps'); // 'gps' | 'indoor'
+
+  // Cash-based access gate — see dataStore's getUserAccess/redeemAccessCode.
+  // 'checking' avoids flashing the code-entry screen before we know the
+  // real answer; local/dev mode (no Firebase) always resolves to 'valid'.
+  const [accessStatus, setAccessStatus] = useState('checking'); // 'checking' | 'valid' | 'invalid'
+  const [accessExpiresAt, setAccessExpiresAt] = useState(null);
+  const [codeInput, setCodeInput] = useState('');
+  const [redeeming, setRedeeming] = useState(false);
 
   // GPS State
   const [targets, setTargets] = useState([]);
@@ -72,6 +88,33 @@ export default function UserScreen({ route, navigation }) {
     loadData();
     return () => stopAll();
   }, []);
+
+  useEffect(() => {
+    checkAccess();
+    const interval = setInterval(checkAccess, ACCESS_RECHECK_INTERVAL);
+    return () => clearInterval(interval);
+  }, []);
+
+  const checkAccess = async () => {
+    const uid = auth?.currentUser?.uid;
+    const { hasAccess, expiresAt } = await getUserAccess(uid);
+    setAccessExpiresAt(expiresAt);
+    setAccessStatus(hasAccess ? 'valid' : 'invalid');
+  };
+
+  const handleRedeemCode = async () => {
+    setRedeeming(true);
+    try {
+      const expiresAt = await redeemAccessCode(codeInput);
+      setAccessExpiresAt(expiresAt);
+      setAccessStatus('valid');
+      setCodeInput('');
+    } catch (err) {
+      showAlert('Code Not Accepted', err.message || 'Could not redeem that code.');
+    } finally {
+      setRedeeming(false);
+    }
+  };
 
   useEffect(() => {
     stopAll();
@@ -478,6 +521,12 @@ export default function UserScreen({ route, navigation }) {
         </TouchableOpacity>
       </View>
 
+      {accessExpiresAt && (
+        <Text style={styles.accessBadge}>
+          Access expires at {accessExpiresAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </Text>
+      )}
+
       <View style={styles.tabContainer}>
         <TouchableOpacity style={[styles.tab, mode === 'gps' && styles.activeTab]} onPress={() => setMode('gps')}>
           <Text style={[styles.tabText, mode === 'gps' && styles.activeTabText]}>GPS Tour</Text>
@@ -524,6 +573,42 @@ export default function UserScreen({ route, navigation }) {
       )}
     </>
   );
+
+  if (accessStatus === 'checking') {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.accent} />
+      </View>
+    );
+  }
+
+  if (accessStatus === 'invalid') {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Audio Tour</Text>
+          <TouchableOpacity onPress={async () => { try { await logout(); } catch (_) {} navigation.replace('Login'); }}>
+            <Text style={{ color: colors.danger }}>Exit</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.redeemCard}>
+          <Text style={styles.redeemTitle}>Enter Your Access Code</Text>
+          <Text style={styles.redeemSubtitle}>Get a code at the ticket counter, then enter it here to start your tour.</Text>
+          <TextInput
+            style={styles.redeemInput}
+            placeholder="e.g. 7K3PQR"
+            placeholderTextColor={colors.inkFaint}
+            autoCapitalize="characters"
+            value={codeInput}
+            onChangeText={setCodeInput}
+          />
+          <TouchableOpacity style={styles.redeemBtn} onPress={handleRedeemCode} disabled={redeeming || !codeInput}>
+            {redeeming ? <ActivityIndicator color={colors.accentInk} /> : <Text style={styles.redeemBtnText}>Unlock Tour</Text>}
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -641,6 +726,13 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg, padding: 20, paddingTop: 40 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   title: { fontSize: 26, fontWeight: '800', color: colors.ink, letterSpacing: 0.5 },
+  accessBadge: { color: colors.inkMuted, fontSize: 12, marginBottom: 12 },
+  redeemCard: { backgroundColor: colors.card, padding: 24, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, marginTop: 12 },
+  redeemTitle: { color: colors.ink, fontSize: 20, fontWeight: '800', marginBottom: 8 },
+  redeemSubtitle: { color: colors.inkMuted, fontSize: 14, marginBottom: 20, lineHeight: 20 },
+  redeemInput: { backgroundColor: colors.bgSoft, borderWidth: 1, borderColor: colors.border, color: colors.ink, padding: 16, borderRadius: radius.md, marginBottom: 16, fontSize: 20, fontWeight: '700', letterSpacing: 4, textAlign: 'center' },
+  redeemBtn: { backgroundColor: colors.accent, padding: 16, borderRadius: radius.md, alignItems: 'center', ...shadow(colors.accent, 0.35) },
+  redeemBtnText: { color: colors.accentInk, fontWeight: 'bold', fontSize: 16, letterSpacing: 0.5 },
   tabContainer: { flexDirection: 'row', marginBottom: 20, backgroundColor: colors.cardStrong, borderRadius: radius.md, padding: 4, borderWidth: 1, borderColor: colors.border },
   tab: { flex: 1, padding: 12, alignItems: 'center', borderRadius: radius.sm },
   activeTab: { backgroundColor: colors.accent, ...shadow(colors.accent, 0.35) },

@@ -20,7 +20,14 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
-    // Every visitor's own profile (name/email/phone from sign-up).
+    // Every visitor's own profile (name/email/phone from sign-up, plus
+    // accessExpiresAt once they redeem a code — see accessCodes below).
+    // Known gap: because this allows the owner to write ANY field on their
+    // own doc, a technically determined visitor could set accessExpiresAt
+    // directly, bypassing a code entirely. Rules alone can't fully close
+    // this without a Cloud Function doing the write server-side instead —
+    // acceptable for a cash-based pilot, worth closing before this becomes
+    // the permanent access model.
     match /users/{uid} {
       allow read, write: if isSignedIn() && request.auth.uid == uid;
     }
@@ -48,6 +55,25 @@ service cloud.firestore {
     match /indoor_exhibits/{id} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
+    }
+
+    // Cash-based access codes. `get` (fetch one code you already know) is
+    // open to any signed-in visitor — that's how redemption checks a code
+    // exists — but `list` (query the whole collection) is admin-only, so a
+    // visitor can never browse for unused codes instead of paying for one.
+    // The `update` rule only permits exactly the shape a real redemption
+    // takes: flipping used false→true, claiming it under your own uid, and
+    // leaving the granted duration untouched.
+    match /accessCodes/{code} {
+      allow get: if isSignedIn();
+      allow list: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if isSignedIn()
+        && resource.data.used == false
+        && request.resource.data.used == true
+        && request.resource.data.redeemedBy == request.auth.uid
+        && request.resource.data.durationHours == resource.data.durationHours;
+      allow delete: if isAdmin();
     }
   }
 }
