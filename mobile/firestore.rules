@@ -1,0 +1,53 @@
+rules_version = '2';
+
+// Paste this into Firebase Console → Firestore Database → Rules → Publish.
+//
+// Model: anyone with an account can READ tour content (monuments, GPS
+// targets, directions, indoor exhibits) — that's the whole app. Only an
+// account with a matching document in `admins/{uid}` can WRITE any of it.
+// There is no way to grant yourself admin from inside the app — that
+// collection can only be written by hand in the Firebase Console, which is
+// the point: it's the one thing a public app build can never self-escalate.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Every visitor's own profile (name/email/phone from sign-up).
+    match /users/{uid} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Admin roster. Readable only by the account it's about (so the app can
+    // check "am I admin?"); never writable from a client.
+    match /admins/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Tour content — readable by any signed-in visitor, editable by admins only.
+    match /monuments/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+    match /targets/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+    match /gps_directions/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+    match /indoor_exhibits/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}

@@ -1,0 +1,31 @@
+rules_version = '2';
+
+// Paste this into Firebase Console → Storage → Rules → Publish.
+// Same model as firestore.rules: any signed-in visitor can play the audio
+// files admins have uploaded; only an admin can upload/replace/delete them.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
+    }
+
+    match /audio/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+    match /gps_directions/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+    match /indoor_audio/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}

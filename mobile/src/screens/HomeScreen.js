@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { getMonuments } from '../utils/dataStore';
+import { getMonuments, logout } from '../utils/dataStore';
 import { MapPin, ChevronRight, LogOut } from 'lucide-react-native';
 import { colors, radius, shadow } from '../theme';
 
@@ -21,6 +21,11 @@ export default function HomeScreen({ navigation }) {
     navigation.navigate('User', { monumentId });
   };
 
+  const handleLogout = async () => {
+    try { await logout(); } catch (_) {}
+    navigation.replace('Login');
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -29,7 +34,7 @@ export default function HomeScreen({ navigation }) {
           <Text style={styles.title}>Welcome Explorer</Text>
           <Text style={styles.subtitle}>Where would you like to visit today?</Text>
         </View>
-        <TouchableOpacity style={styles.logoutBtn} onPress={() => navigation.replace('Login')}>
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <LogOut color={colors.danger} size={20} />
         </TouchableOpacity>
       </View>

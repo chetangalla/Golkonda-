@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { db, storage } from './firebase';
-import { collection, getDocs, addDoc, doc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { db, storage, auth } from './firebase';
+import { collection, getDocs, addDoc, doc, deleteDoc, updateDoc, getDoc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 
 const LOCAL_KEY = '@audio_targets';
 const USERS_KEY = '@users';
@@ -9,6 +10,11 @@ const MONUMENTS_KEY = '@monuments';
 const GPS_DIRECTIONS_KEY = '@gps_directions';
 
 // ======================= AUTH ========================
+// Local-only fallback, used only until Firebase Auth is configured (see
+// FIREBASE_SETUP.md). No password is ever checked here — it exists purely
+// so the app remains testable before a real backend is wired up. Once
+// `auth` is set, signUp/login below take over and every account requires
+// a real password.
 export async function registerUser(name, email, phone) {
   const stored = await AsyncStorage.getItem(USERS_KEY);
   const users = stored ? JSON.parse(stored) : [];
@@ -27,6 +33,46 @@ export async function loginUser(email) {
   const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
   if (!user) throw new Error('Email not found. Please sign up first.');
   return user;
+}
+
+// Real accounts, backed by Firebase Authentication. `role` is decided by
+// whether an `admins/{uid}` Firestore document exists for that account —
+// there's no client-side way to grant yourself admin, since only you can
+// create that document (via the Firebase Console, not the app).
+export async function signUp(name, email, password, phone) {
+  if (auth) {
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    await setDoc(doc(db, 'users', cred.user.uid), {
+      name, email, phone, createdAt: new Date().toISOString()
+    });
+    return { uid: cred.user.uid, email: cred.user.email, role: 'user' };
+  } else {
+    const local = await registerUser(name, email, phone);
+    return { ...local, role: 'user' };
+  }
+}
+
+export async function login(email, password) {
+  if (auth) {
+    const cred = await signInWithEmailAndPassword(auth, email, password);
+    const adminDoc = await getDoc(doc(db, 'admins', cred.user.uid));
+    return { uid: cred.user.uid, email: cred.user.email, role: adminDoc.exists() ? 'admin' : 'user' };
+  } else {
+    // No backend configured yet — these two hardcoded logins are dev-only
+    // shortcuts (no password check) and disappear the moment Firebase Auth
+    // is live, since real accounts take this branch instead.
+    const normalized = email.toLowerCase();
+    if (normalized === 'admin@tourist.com') return { email, role: 'admin' };
+    if (normalized === 'user@tourist.com') return { email, role: 'user' };
+    const local = await loginUser(email);
+    return { ...local, role: 'user' };
+  }
+}
+
+export async function logout() {
+  if (auth) {
+    await signOut(auth);
+  }
 }
 
 // ===================== MONUMENTS =====================
@@ -269,18 +315,30 @@ export async function deleteExhibit(id) {
 }
 
 // ===================== BACKUP / RESTORE =====================
-// Local storage lives only on this device — nothing here is synced anywhere.
-// These let the admin pull everything out as one portable file (save it to
-// Files, email it, drop it in a cloud drive) and load it back in on any
-// device. Note: audioUrl values are local file:// paths on THIS phone, so
-// they won't play back after restoring on a different device — re-attach
-// audio via "Update Item" after restoring. Coordinates, names, and the
-// tour structure all restore fully.
+// Without Firebase, local storage lives only on one device and nothing is
+// synced anywhere — these let the admin pull everything out as one portable
+// file and load it back in on any device. Note: audioUrl values recorded/
+// uploaded on a phone are local file:// paths, so they won't play back after
+// restoring on a different device — re-attach audio via "Update Item" after
+// restoring. Coordinates, names, and the tour structure all restore fully.
+//
+// With Firebase configured, this instead reads from / writes to Firestore
+// directly, so a restore is visible to every device immediately. Original
+// document IDs are preserved on import — targets/exhibits/directions
+// reference their parent by that ID (parentMonumentId, parentGpsId), and
+// those links only stay intact if restored docs keep the IDs they were
+// exported with.
 const BACKUP_KEYS = {
   monuments: MONUMENTS_KEY,
   targets: LOCAL_KEY,
   gpsDirections: GPS_DIRECTIONS_KEY,
   exhibits: INDOOR_KEY,
+};
+const BACKUP_COLLECTIONS = {
+  monuments: 'monuments',
+  targets: 'targets',
+  gpsDirections: 'gps_directions',
+  exhibits: 'indoor_exhibits',
 };
 
 export async function exportAllData() {
@@ -290,9 +348,16 @@ export async function exportAllData() {
     version: 1,
     data: {},
   };
-  for (const [label, key] of Object.entries(BACKUP_KEYS)) {
-    const stored = await AsyncStorage.getItem(key);
-    payload.data[label] = stored ? JSON.parse(stored) : [];
+  if (db) {
+    for (const [label, collName] of Object.entries(BACKUP_COLLECTIONS)) {
+      const snap = await getDocs(collection(db, collName));
+      payload.data[label] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    }
+  } else {
+    for (const [label, key] of Object.entries(BACKUP_KEYS)) {
+      const stored = await AsyncStorage.getItem(key);
+      payload.data[label] = stored ? JSON.parse(stored) : [];
+    }
   }
   return payload;
 }
@@ -301,17 +366,32 @@ export async function importAllData(payload, { merge = false } = {}) {
   if (!payload || typeof payload !== 'object' || !payload.data) {
     throw new Error('This file is not a recognized backup.');
   }
-  for (const [label, key] of Object.entries(BACKUP_KEYS)) {
-    const incoming = Array.isArray(payload.data[label]) ? payload.data[label] : [];
-    if (!merge) {
-      await AsyncStorage.setItem(key, JSON.stringify(incoming));
-      continue;
+  if (db) {
+    for (const [label, collName] of Object.entries(BACKUP_COLLECTIONS)) {
+      const incoming = Array.isArray(payload.data[label]) ? payload.data[label] : [];
+      if (!merge) {
+        // A "replace" restore should actually replace — clear the collection first.
+        const existingSnap = await getDocs(collection(db, collName));
+        await Promise.all(existingSnap.docs.map(d => deleteDoc(doc(db, collName, d.id))));
+      }
+      await Promise.all(incoming.map(item => {
+        const { id, ...fields } = item;
+        return setDoc(doc(db, collName, id), fields);
+      }));
     }
-    const stored = await AsyncStorage.getItem(key);
-    const existing = stored ? JSON.parse(stored) : [];
-    const existingIds = new Set(existing.map(item => item.id));
-    const combined = [...existing, ...incoming.filter(item => !existingIds.has(item.id))];
-    await AsyncStorage.setItem(key, JSON.stringify(combined));
+  } else {
+    for (const [label, key] of Object.entries(BACKUP_KEYS)) {
+      const incoming = Array.isArray(payload.data[label]) ? payload.data[label] : [];
+      if (!merge) {
+        await AsyncStorage.setItem(key, JSON.stringify(incoming));
+        continue;
+      }
+      const stored = await AsyncStorage.getItem(key);
+      const existing = stored ? JSON.parse(stored) : [];
+      const existingIds = new Set(existing.map(item => item.id));
+      const combined = [...existing, ...incoming.filter(item => !existingIds.has(item.id))];
+      await AsyncStorage.setItem(key, JSON.stringify(combined));
+    }
   }
   return true;
 }

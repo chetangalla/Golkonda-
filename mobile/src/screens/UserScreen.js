@@ -4,8 +4,9 @@ import * as Location from 'expo-location';
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
 import { MapPin, Navigation, Volume2, Music, Footprints, Play, ChevronRight, CornerUpRight, ArrowUpCircle, Mic } from 'lucide-react-native';
-import { getTargets, getExhibits, getGpsDirections } from '../utils/dataStore';
+import { getTargets, getExhibits, getGpsDirections, logout } from '../utils/dataStore';
 import { calculateDistance } from '../utils/geo';
+import { resolvePlayableUri } from '../utils/audioSource';
 import { colors, radius, shadow } from '../theme';
 
 const AUTO_PLAY_DISTANCE = 7;
@@ -153,7 +154,8 @@ export default function UserScreen({ route, navigation }) {
 
       setNowPlaying(name);
       try {
-        const { sound } = await Audio.Sound.createAsync({ uri: url }, { shouldPlay: true });
+        const playableUri = await resolvePlayableUri(url);
+        const { sound } = await Audio.Sound.createAsync({ uri: playableUri }, { shouldPlay: true });
 
         // If stopAll was called while audio was loading, isPlayingRef will be false
         if (!isPlayingRef.current) {
@@ -471,7 +473,7 @@ export default function UserScreen({ route, navigation }) {
     <>
       <View style={styles.header}>
         <Text style={styles.title}>Audio Tour</Text>
-        <TouchableOpacity onPress={() => { stopAll(); setVerificationState('idle'); navigation.replace('Login'); }}>
+        <TouchableOpacity onPress={async () => { stopAll(); setVerificationState('idle'); try { await logout(); } catch (_) {} navigation.replace('Login'); }}>
           <Text style={{ color: colors.danger }}>Exit</Text>
         </TouchableOpacity>
       </View>

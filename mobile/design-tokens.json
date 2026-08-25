@@ -1,0 +1,37 @@
+{
+  "Yatra Tales": {
+    "color": {
+      "bg": { "value": "#14101E", "type": "color", "description": "Deep indigo-charcoal ground" },
+      "bgSoft": { "value": "rgba(10, 8, 16, 0.6)", "type": "color", "description": "Recessed wells (inputs, inset panels)" },
+      "card": { "value": "rgba(38, 31, 51, 0.7)", "type": "color" },
+      "cardStrong": { "value": "rgba(28, 23, 39, 0.92)", "type": "color" },
+      "border": { "value": "rgba(112, 91, 130, 0.35)", "type": "color" },
+      "borderStrong": { "value": "rgba(133, 108, 156, 0.55)", "type": "color" },
+      "ink": { "value": "#F4ECDD", "type": "color", "description": "Warm parchment white, primary text" },
+      "inkMuted": { "value": "#AFA08F", "type": "color", "description": "Warm taupe, secondary text" },
+      "inkFaint": { "value": "#7C7284", "type": "color", "description": "Dim plum-grey, disabled/tertiary" },
+      "accent": { "value": "#D7A548", "type": "color", "description": "Brass gold — primary CTAs, active states" },
+      "accentInk": { "value": "#231A0D", "type": "color", "description": "Text/icon color on top of accent" },
+      "accentSoft": { "value": "rgba(215, 165, 72, 0.16)", "type": "color" },
+      "success": { "value": "#5FAE86", "type": "color", "description": "Jade — proximity, now-playing" },
+      "successStrong": { "value": "#3E8B67", "type": "color" },
+      "successSoft": { "value": "rgba(95, 174, 134, 0.16)", "type": "color" },
+      "violet": { "value": "#A084C9", "type": "color", "description": "Amethyst — floor changes, verification" },
+      "violetSoft": { "value": "rgba(160, 132, 201, 0.16)", "type": "color" },
+      "danger": { "value": "#C1584B", "type": "color", "description": "Rust — exit, stop, errors" },
+      "dangerSoft": { "value": "rgba(193, 88, 75, 0.16)", "type": "color" },
+      "neutral": { "value": "#4E4360", "type": "color", "description": "Secondary buttons, inactive icons" },
+
+      "brand.navy": { "value": "#173F4D", "type": "color", "description": "From the real Yatra Tales logo" },
+      "brand.terracotta": { "value": "#B67F5E", "type": "color", "description": "From the real Yatra Tales logo" },
+      "brand.cream": { "value": "#FFFCF1", "type": "color", "description": "From the real Yatra Tales logo — used as icon/splash background" }
+    },
+    "borderRadius": {
+      "sm": { "value": "8", "type": "borderRadius" },
+      "md": { "value": "12", "type": "borderRadius" },
+      "lg": { "value": "16", "type": "borderRadius" },
+      "xl": { "value": "20", "type": "borderRadius" },
+      "xxl": { "value": "24", "type": "borderRadius" }
+    }
+  }
+}

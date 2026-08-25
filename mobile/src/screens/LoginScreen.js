@@ -1,39 +1,25 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
-import { loginUser } from '../utils/dataStore';
+import { login } from '../utils/dataStore';
 import { showAlert } from '../utils/alert';
 import { colors, radius, shadow } from '../theme';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    if (!email) {
-      showAlert('Missing Field', 'Please enter your email.');
+    if (!email || !password) {
+      showAlert('Missing Field', 'Please enter your email and password.');
       return;
     }
 
     Keyboard.dismiss();
-    const normalized = email.toLowerCase();
-
-    // Hardcoded Master Admin Login
-    if (normalized === 'admin@tourist.com') {
-      navigation.replace('Master');
-      return;
-    }
-
-    // Hardcoded listen-only login — same idea as the admin shortcut above,
-    // but routes straight to the visitor tour with no edit access at all.
-    if (normalized === 'user@tourist.com') {
-      navigation.replace('Home');
-      return;
-    }
-
     setLoading(true);
     try {
-      await loginUser(email);
-      navigation.replace('Home');
+      const result = await login(email, password);
+      navigation.replace(result.role === 'admin' ? 'Master' : 'Home');
     } catch (err) {
       showAlert('Login Failed', err.message);
     } finally {
@@ -56,6 +42,15 @@ export default function LoginScreen({ navigation }) {
           autoCapitalize="none"
           value={email}
           onChangeText={setEmail}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          placeholderTextColor={colors.inkFaint}
+          secureTextEntry
+          autoCapitalize="none"
+          value={password}
+          onChangeText={setPassword}
         />
 
         <TouchableOpacity style={styles.btnPrimary} onPress={handleLogin} disabled={loading}>

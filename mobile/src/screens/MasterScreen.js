@@ -9,6 +9,7 @@ import * as Sharing from 'expo-sharing';
 import { MapPin, Mic, Square, Trash2, Volume2, Footprints, Upload, Edit3, DownloadCloud, UploadCloud } from 'lucide-react-native';
 import { getTargets, addTarget, updateTarget, deleteTarget, getExhibits, addExhibit, deleteExhibit, getMonuments, addMonument, deleteMonument, getGpsDirections, addGpsDirection, updateGpsDirection, deleteGpsDirection, exportAllData, importAllData } from '../utils/dataStore';
 import { showAlert } from '../utils/alert';
+import { resolvePlayableUri } from '../utils/audioSource';
 
 export default function MasterScreen({ navigation }) {
   const [mode, setMode] = useState('monument'); // 'monument' | 'gps' | 'indoor'
@@ -284,7 +285,8 @@ export default function MasterScreen({ navigation }) {
 
   const playTestAudio = async (url) => {
     try {
-      await Audio.Sound.createAsync({ uri: url }, { shouldPlay: true });
+      const playableUri = await resolvePlayableUri(url);
+      await Audio.Sound.createAsync({ uri: playableUri }, { shouldPlay: true });
     } catch (err) {
       showAlert('Playback Error', 'Cannot play this audio file.');
     }
