@@ -9,6 +9,24 @@ const USERS_KEY = '@users';
 const MONUMENTS_KEY = '@monuments';
 const GPS_DIRECTIONS_KEY = '@gps_directions';
 
+// Firestore caps a single document at 1 MiB. Audio picked on the web comes
+// back as a base64 data: URI (see MasterScreen's pickAudio) — embedding
+// that directly in a document works for a short clip but silently fails
+// ("Failed to save") the moment a longer one pushes the whole document
+// over that limit. Uploading to Firebase Storage instead has no such
+// ceiling, and produces a real https:// link that plays natively on every
+// platform with no conversion needed at all — strictly better than the
+// data: URI even where it does fit under 1 MiB.
+async function uploadAudioIfNeeded(audioUri, storageFolder) {
+  if (!(db && storage && audioUri)) return audioUri;
+  if (!(audioUri.startsWith('file://') || audioUri.startsWith('data:'))) return audioUri; // already a real URL — nothing to do
+  const response = await fetch(audioUri);
+  const blob = await response.blob();
+  const fileRef = ref(storage, `${storageFolder}/${Date.now()}.m4a`);
+  await uploadBytes(fileRef, blob);
+  return await getDownloadURL(fileRef);
+}
+
 // ======================= AUTH ========================
 // Local-only fallback, used only until Firebase Auth is configured (see
 // FIREBASE_SETUP.md). No password is ever checked here — it exists purely
@@ -138,14 +156,8 @@ export async function addTarget(name, lat, lng, audioUri, floor = 1, parentMonum
   let audioUrl = audioUri;
 
   if (db && storage && audioUri) {
-    if (audioUri.startsWith('file://')) {
-      const response = await fetch(audioUri);
-      const blob = await response.blob();
-      const fileRef = ref(storage, `audio/${Date.now()}.m4a`);
-      await uploadBytes(fileRef, blob);
-      audioUrl = await getDownloadURL(fileRef);
-    }
-    
+    audioUrl = await uploadAudioIfNeeded(audioUri, 'audio');
+
     const newTarget = { name, lat, lng, audioUrl, floor, parentMonumentId, triggerRadius, orderIndex };
     const docRef = await addDoc(collection(db, 'targets'), newTarget);
     return { id: docRef.id, ...newTarget };
@@ -162,8 +174,11 @@ export async function addTarget(name, lat, lng, audioUri, floor = 1, parentMonum
 export async function updateTarget(id, updates) {
   if (db) {
     const docRef = doc(db, 'targets', id);
-    await updateDoc(docRef, updates);
-    return { id, ...updates };
+    const finalUpdates = updates.audioUrl
+      ? { ...updates, audioUrl: await uploadAudioIfNeeded(updates.audioUrl, 'audio') }
+      : updates;
+    await updateDoc(docRef, finalUpdates);
+    return { id, ...finalUpdates };
   } else {
     const stored = await AsyncStorage.getItem(LOCAL_KEY);
     let targets = stored ? JSON.parse(stored) : [];
@@ -205,14 +220,8 @@ export async function addGpsDirection(name, audioUri, parentGpsId, delaySeconds 
   let audioUrl = audioUri;
 
   if (db && storage && audioUri) {
-    if (audioUri.startsWith('file://')) {
-      const response = await fetch(audioUri);
-      const blob = await response.blob();
-      const fileRef = ref(storage, `gps_directions/${Date.now()}.m4a`);
-      await uploadBytes(fileRef, blob);
-      audioUrl = await getDownloadURL(fileRef);
-    }
-    
+    audioUrl = await uploadAudioIfNeeded(audioUri, 'gps_directions');
+
     const newDir = { name, audioUrl, parentGpsId, delaySeconds };
     const docRef = await addDoc(collection(db, 'gps_directions'), newDir);
     return { id: docRef.id, ...newDir };
@@ -229,8 +238,11 @@ export async function addGpsDirection(name, audioUri, parentGpsId, delaySeconds 
 export async function updateGpsDirection(id, updates) {
   if (db) {
     const docRef = doc(db, 'gps_directions', id);
-    await updateDoc(docRef, updates);
-    return { id, ...updates };
+    const finalUpdates = updates.audioUrl
+      ? { ...updates, audioUrl: await uploadAudioIfNeeded(updates.audioUrl, 'gps_directions') }
+      : updates;
+    await updateDoc(docRef, finalUpdates);
+    return { id, ...finalUpdates };
   } else {
     const stored = await AsyncStorage.getItem(GPS_DIRECTIONS_KEY);
     let directions = stored ? JSON.parse(stored) : [];
@@ -282,14 +294,8 @@ export async function addExhibit(name, audioUri, orderIndex, floor = 1, nodeType
   let audioUrl = audioUri;
 
   if (db && storage && audioUri) {
-    if (audioUri.startsWith('file://')) {
-      const response = await fetch(audioUri);
-      const blob = await response.blob();
-      const fileRef = ref(storage, `indoor_audio/${Date.now()}.m4a`);
-      await uploadBytes(fileRef, blob);
-      audioUrl = await getDownloadURL(fileRef);
-    }
-    
+    audioUrl = await uploadAudioIfNeeded(audioUri, 'indoor_audio');
+
     const newExhibit = { name, audioUrl, orderIndex, floor, nodeType, targetFloor, parentGpsId, verificationPrompt, delaySeconds };
     const docRef = await addDoc(collection(db, 'indoor_exhibits'), newExhibit);
     return { id: docRef.id, ...newExhibit };
