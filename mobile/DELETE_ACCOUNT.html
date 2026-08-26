@@ -1,0 +1,200 @@
+<title>Delete Your Yatra Tales Account</title>
+<style>
+  :root {
+    --bg: #faf7f1;
+    --ink: #221d15;
+    --ink-dim: #6b6152;
+    --card: #ffffff;
+    --border: #e5ddcc;
+    --accent: #a97a2f;
+    --accent-ink: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14101e;
+      --ink: #f4ecdd;
+      --ink-dim: #afa08f;
+      --card: #1c1727;
+      --border: #392f20;
+      --accent: #d7a548;
+      --accent-ink: #231a0d;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14101e;
+    --ink: #f4ecdd;
+    --ink-dim: #afa08f;
+    --card: #1c1727;
+    --border: #392f20;
+    --accent: #d7a548;
+    --accent-ink: #231a0d;
+  }
+  :root[data-theme="light"] {
+    --bg: #faf7f1;
+    --ink: #221d15;
+    --ink-dim: #6b6152;
+    --card: #ffffff;
+    --border: #e5ddcc;
+    --accent: #a97a2f;
+    --accent-ink: #ffffff;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    line-height: 1.6;
+    display: flex;
+    justify-content: center;
+    padding: 56px 20px 80px;
+  }
+  main { width: 100%; max-width: 640px; }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 28px;
+  }
+  .mark {
+    width: 22px;
+    height: 26px;
+    border-radius: 11px 11px 0 0;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+  .brand-name {
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+  }
+
+  h1 {
+    font-size: 1.9rem;
+    font-weight: 750;
+    letter-spacing: -0.01em;
+    margin: 0 0 12px;
+    text-wrap: balance;
+  }
+  .intro {
+    font-size: 1.05rem;
+    margin: 0 0 36px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  section { margin-bottom: 32px; }
+  h2 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 0 0 12px;
+  }
+  p { margin: 0 0 12px; max-width: 62ch; }
+  p:last-child { margin-bottom: 0; }
+  ul { margin: 0 0 12px; padding-left: 22px; }
+  li { margin-bottom: 8px; }
+  li:last-child { margin-bottom: 0; }
+
+  .request-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+  }
+  .request-card p { margin: 0 0 16px; }
+  .btn {
+    display: inline-block;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-weight: 700;
+    text-decoration: none;
+    padding: 13px 22px;
+    border-radius: 10px;
+    font-size: 0.95rem;
+  }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 4px 0 0;
+    font-size: 0.92rem;
+  }
+  .data-table th, .data-table td {
+    text-align: left;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .data-table th {
+    background: var(--card);
+    font-weight: 700;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-dim);
+  }
+  .table-wrap { overflow-x: auto; }
+
+  footer {
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    font-size: 0.82rem;
+    color: var(--ink-dim);
+  }
+  a { color: var(--accent); }
+</style>
+
+<main>
+  <div class="brand">
+    <span class="mark" aria-hidden="true"></span>
+    <span class="brand-name">Yatra Tales</span>
+  </div>
+
+  <h1>Delete Your Account</h1>
+  <p class="intro">
+    You can request deletion of your Yatra Tales account and the data
+    attached to it at any time — you don't need the app installed to do
+    this, and you don't need to explain why.
+  </p>
+
+  <section>
+    <h2>How to request deletion</h2>
+    <div class="request-card">
+      <p>Email us from the address your account is registered under, with the subject "Delete my account." We'll act on it within 7 days and confirm once it's done.</p>
+      <a class="btn" href="mailto:info@yatratales.co.in?subject=Delete%20my%20account">Email info@yatratales.co.in</a>
+    </div>
+  </section>
+
+  <section>
+    <h2>What gets deleted</h2>
+    <div class="table-wrap">
+      <table class="data-table">
+        <tr><th>Data</th><th>What happens</th></tr>
+        <tr><td>Name, email, phone number</td><td>Permanently deleted</td></tr>
+        <tr><td>Login credentials</td><td>Account deactivated — you'd need to sign up again to use the app afterward</td></tr>
+        <tr><td>Any active or unused access code tied to your account</td><td>Deleted along with the account</td></tr>
+      </table>
+    </div>
+    <p style="margin-top: 14px;">
+      Location data is never stored against your account in the first
+      place — it's used live, in the moment, to trigger the right audio,
+      and isn't retained afterward. There's nothing tied to your account
+      on that front to separately delete.
+    </p>
+  </section>
+
+  <section>
+    <h2>Timeline</h2>
+    <p>Deletion is completed within 7 days of a verified request. You'll get a confirmation email once it's done.</p>
+  </section>
+
+  <footer>
+    Yatra Tales · See also our <a href="https://claude.ai/code/artifact/a6c44e90-bd41-4cb6-a54c-118bd678f333">Privacy Policy</a>
+  </footer>
+</main>
